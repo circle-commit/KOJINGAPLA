@@ -1,22 +1,36 @@
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File, Form, UploadFile
 import uvicorn
 
 app = FastAPI()
 
-@app.post("/analyze")
-async def analyze_image(file: UploadFile = File(...)):
-    contents = await file.read()
 
-    result = {
-        "status": "success",
-        "detected_objects": [
-            {"label": "볼라드", "distance": "1.5m", "direction": "center"},
-            {"label": "전동 킥보드", "distance": "2.0m", "direction": "left"}
-        ],
-        "voice_guide": "전방 1.5미터에 볼라드가 있습니다. 왼쪽으로 우회하세요."
-    }
+@app.post("/analyze")
+async def analyze_image(
+    image: UploadFile = File(...),
+    mode: str = Form("live"),
+):
+    await image.read()
+
+    if mode == "text":
+        result = {
+            "status": "success",
+            "mode": mode,
+            "detected_text": "Emergency exit on the left. Keep door closed.",
+            "voice_guide": "Text Description mode. I found text that says, Emergency exit on the left. Keep door closed.",
+        }
+    else:
+        result = {
+            "status": "success",
+            "mode": mode,
+            "detected_objects": [
+                {"label": "bollard", "distance": "1.5m", "direction": "center"},
+                {"label": "electric scooter", "distance": "2.0m", "direction": "left"},
+            ],
+            "voice_guide": "Live Analyzing mode. There is a bollard 1.5 meters ahead. Move slightly to the right.",
+        }
 
     return result
 
+
 if __name__ == "__main__":
-    uvicorn.run(app, host='0.0.0.0', port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8000)

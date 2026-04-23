@@ -6,96 +6,102 @@
 //
 
 import AVFoundation
-import UIKit
 import Combine
+import UIKit
 
-class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleBufferDelegate {
+final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleBufferDelegate {
+    enum ProcessingMode: String {
+        case liveAnalyzing = "live"
+        case textDescription = "text"
+    }
+    
     @Published var session = AVCaptureSession()
-    @Published var lastResponse: String = "대기 중..." // 👈 서버 응답 저장용
-    var lastCapturedImage: UIImage? // 👈 전송할 마지막 프레임 저장
-        
+    @Published var latestGuide = "Live Analyzing mode is ready."
+    @Published var isProcessing = false
+    
     private let output = AVCaptureVideoDataOutput()
-    var onFrameCaptured: ((UIImage) -> Void)?
+    private let speechSynthesizer = AVSpeechSynthesizer()
+    private let processingQueue = DispatchQueue(label: "glass.processing.queue")
+    private var latestFrame: UIImage?
+    private var currentMode: ProcessingMode = .liveAnalyzing
+    private var lastLiveRequestDate: Date = .distantPast
+    private let liveRequestInterval: TimeInterval = 2.0
+    private var serverURL = "http://192.168.0.XX:8000/analyze"
     
     override init() {
         super.init()
         checkPermissions()
         setupSession()
     }
-
-    func checkPermissions() {
+    
+    func setMode(_ mode: ProcessingMode) {
+        currentMode = mode
+        
+        let message: String
+        switch mode {
+        case .liveAnalyzing:
+            message = "Live Analyzing mode is on. The app will keep checking the scene ahead."
+        case .textDescription:
+            message = "Text Description mode is on. Tap the read text button to scan nearby text."
+        }
+        
+        updateGuide(message, shouldSpeak: true)
+    }
+    
+    func triggerTextCapture() {
+        guard currentMode == .textDescription else { return }
+        guard let frame = latestFrame else {
+            updateGuide("Camera frame is not ready yet. Please try again.", shouldSpeak: true)
+            return
+        }
+        
+        processImage(frame, mode: .textDescription)
+    }
+    
+    private func checkPermissions() {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
-        case .authorized: return
+        case .authorized:
+            return
         case .notDetermined:
             AVCaptureDevice.requestAccess(for: .video) { _ in }
-        default: break
+        default:
+            updateGuide("Camera permission is needed to use this app.", shouldSpeak: false)
         }
     }
-
-    func setupSession() {
+    
+    private func setupSession() {
         guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
               let input = try? AVCaptureDeviceInput(device: device) else { return }
         
         session.beginConfiguration()
-        if session.canAddInput(input) { session.addInput(input) }
+        if session.canAddInput(input) {
+            session.addInput(input)
+        }
         
+        output.alwaysDiscardsLateVideoFrames = true
         output.setSampleBufferDelegate(self, queue: DispatchQueue(label: "videoQueue"))
-        if session.canAddOutput(output) { session.addOutput(output) }
+        if session.canAddOutput(output) {
+            session.addOutput(output)
+        }
         session.commitConfiguration()
         
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             self?.session.startRunning()
         }
     }
-
-    // 카메라 프레임이 들어올 때마다 호출되는 함수
+    
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         guard let image = imageFromSampleBuffer(sampleBuffer) else { return }
-        DispatchQueue.main.async {
-            self.lastCapturedImage = image
-            self.onFrameCaptured?(image)
-        }
+        latestFrame = image
+        
+        guard currentMode == .liveAnalyzing else { return }
+        guard !isProcessing else { return }
+        guard Date().timeIntervalSince(lastLiveRequestDate) >= liveRequestInterval else { return }
+        
+        lastLiveRequestDate = Date()
+        processImage(image, mode: .liveAnalyzing)
     }
-
-    // 🚀 서버로 이미지를 업로드하는 핵심 함수
-        func uploadImage(mode: String) {
-            guard let image = lastCapturedImage else { return }
-            // 1. 민희님 맥북의 IP 주소로 수정하세요!
-            guard let url = URL(string: "http://192.168.XX.XX:8000/analyze") else { return }
-            
-            var request = URLRequest(url: url)
-            request.httpMethod = "POST"
-            
-            let boundary = "Boundary-\(UUID().uuidString)"
-            request.setValue("multipart/form-data; boundary=\(boundary)", for: HTTPHeaderField: "Content-Type")
-            
-            guard let imageData = image.jpegData(compressionQuality: 0.5) else { return }
-            
-            var body = Data()
-            // 모드 데이터 추가
-            body.append("--\(boundary)\r\n".data(using: .utf8)!)
-            body.append("Content-Disposition: form-data; name=\"mode\"\r\n\r\n".data(using: .utf8)!)
-            body.append("\(mode)\r\n".data(using: .utf8)!)
-            
-            // 이미지 데이터 추가
-            body.append("--\(boundary)\r\n".data(using: .utf8)!)
-            body.append("Content-Disposition: form-data; name=\"file\"; filename=\"frame.jpg\"\r\n".data(using: .utf8)!)
-            body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
-            body.append(imageData)
-            body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
-            
-            request.httpBody = body
-            
-            URLSession.shared.dataTask(with: request) { [weak self] data, _, _ in
-                if let data = data,
-                   let response = try? JSONDecoder().decode([String: String].self, from: data) {
-                    DispatchQueue.main.async {
-                        // 서버 응답(voice_guide)을 변수에 저장 -> UI가 자동으로 바뀜!
-                        self?.lastResponse = response["voice_guide"] ?? "결과 없음"
-                    }
-                }
-            }.resume()
-        }
+    
     private func imageFromSampleBuffer(_ buffer: CMSampleBuffer) -> UIImage? {
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(buffer) else { return nil }
         let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
@@ -104,4 +110,93 @@ class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleB
         return UIImage(cgImage: cgImage, scale: 1.0, orientation: .right)
     }
     
+    private func processImage(_ image: UIImage, mode: ProcessingMode) {
+        guard !isProcessing else { return }
+        
+        DispatchQueue.main.async {
+            self.isProcessing = true
+        }
+        
+        sendImageToServer(image: image, mode: mode) { [weak self] guide in
+            guard let self else { return }
+            self.updateGuide(guide, shouldSpeak: true)
+            DispatchQueue.main.async {
+                self.isProcessing = false
+            }
+        }
+    }
+    
+    private func sendImageToServer(image: UIImage, mode: ProcessingMode, completion: @escaping (String) -> Void) {
+        guard let url = URL(string: serverURL) else {
+            DispatchQueue.main.async {
+                self.isProcessing = false
+            }
+            completion("Set the backend server IP address in CameraManager to start analysis.")
+            return
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        
+        let boundary = "Boundary-\(UUID().uuidString)"
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        
+        guard let imageData = image.jpegData(compressionQuality: 0.5) else {
+            DispatchQueue.main.async {
+                self.isProcessing = false
+            }
+            completion("The camera image could not be prepared for upload.")
+            return
+        }
+        
+        var body = Data()
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"mode\"\r\n\r\n".data(using: .utf8)!)
+        body.append("\(mode.rawValue)\r\n".data(using: .utf8)!)
+        
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"image\"; filename=\"frame.jpg\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
+        body.append(imageData)
+        body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
+        
+        request.httpBody = body
+        
+        URLSession.shared.dataTask(with: request) { data, _, error in
+            if let error {
+                completion("Server connection failed: \(error.localizedDescription)")
+                return
+            }
+            
+            guard let data,
+                  let responseJSON = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                completion("The server returned an unreadable response.")
+                return
+            }
+            
+            let guide = responseJSON["voice_guide"] as? String ?? "No guidance was returned."
+            completion(guide)
+        }.resume()
+    }
+    
+    private func updateGuide(_ guide: String, shouldSpeak: Bool) {
+        DispatchQueue.main.async {
+            self.latestGuide = guide
+        }
+        
+        guard shouldSpeak else { return }
+        speak(guide)
+    }
+    
+    private func speak(_ text: String) {
+        guard !text.isEmpty else { return }
+        
+        processingQueue.async {
+            self.speechSynthesizer.stopSpeaking(at: .immediate)
+            let utterance = AVSpeechUtterance(string: text)
+            utterance.rate = 0.48
+            utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
+            self.speechSynthesizer.speak(utterance)
+        }
+    }
 }
