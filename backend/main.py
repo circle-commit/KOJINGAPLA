@@ -1,7 +1,15 @@
-from fastapi import FastAPI, File, Form, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 import uvicorn
 
+from services.guide_service import analyze_live_scene
+from services.text_service import analyze_text_scene
+
 app = FastAPI()
+
+
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
 
 
 @app.post("/analyze")
@@ -9,27 +17,18 @@ async def analyze_image(
     image: UploadFile = File(...),
     mode: str = Form("live"),
 ):
-    await image.read()
+    image_bytes = await image.read()
+
+    if not image_bytes:
+        raise HTTPException(status_code=400, detail="Image payload is empty.")
 
     if mode == "text":
-        result = {
-            "status": "success",
-            "mode": mode,
-            "detected_text": "Emergency exit on the left. Keep door closed.",
-            "voice_guide": "Text Description mode. I found text that says, Emergency exit on the left. Keep door closed.",
-        }
-    else:
-        result = {
-            "status": "success",
-            "mode": mode,
-            "detected_objects": [
-                {"label": "bollard", "distance": "1.5m", "direction": "center"},
-                {"label": "electric scooter", "distance": "2.0m", "direction": "left"},
-            ],
-            "voice_guide": "Live Analyzing mode. There is a bollard 1.5 meters ahead. Move slightly to the right.",
-        }
+        return analyze_text_scene(image_bytes)
 
-    return result
+    if mode == "live":
+        return analyze_live_scene(image_bytes)
+
+    raise HTTPException(status_code=400, detail=f"Unsupported mode: {mode}")
 
 
 if __name__ == "__main__":

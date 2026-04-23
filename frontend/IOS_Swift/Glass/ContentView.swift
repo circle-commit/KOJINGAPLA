@@ -8,6 +8,17 @@
 import SwiftUI
 
 struct ContentView: View {
+    private enum Palette {
+        static let surface = Color.black.opacity(0.88)
+        static let surfaceBorder = Color.white.opacity(0.2)
+        static let accent = Color(red: 1.0, green: 0.84, blue: 0.1)
+        static let accentStrong = Color(red: 1.0, green: 0.72, blue: 0.0)
+        static let accentText = Color.black
+        static let secondarySurface = Color(red: 0.08, green: 0.08, blue: 0.1)
+        static let passiveButton = Color(red: 0.18, green: 0.18, blue: 0.2)
+        static let liveMode = Color(red: 0.18, green: 0.82, blue: 0.52)
+    }
+    
     private enum CameraMode: String {
         case liveAnalyzing = "Live Analyzing"
         case textDescription = "Text Description"
@@ -58,7 +69,7 @@ struct ContentView: View {
                 .edgesIgnoringSafeArea(.all)
             
             LinearGradient(
-                colors: [.black.opacity(0.45), .clear, .black.opacity(0.72)],
+                colors: [.black.opacity(0.7), .black.opacity(0.18), .black.opacity(0.86)],
                 startPoint: .top,
                 endPoint: .bottom
             )
@@ -73,6 +84,13 @@ struct ContentView: View {
                 
                 guidanceCard
                     .padding(.horizontal, 20)
+                
+                if selectedMode == .textDescription,
+                   let detectedText = cameraManager.latestDetectedText,
+                   !detectedText.isEmpty {
+                    detectedTextCard(text: detectedText)
+                        .padding(.horizontal, 20)
+                }
                 
                 actionCard
                     .padding(.horizontal, 20)
@@ -90,21 +108,22 @@ struct ContentView: View {
     private var topModeCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             Label(selectedMode.rawValue, systemImage: selectedMode.icon)
-                .font(.headline.weight(.semibold))
+                .font(.title3.weight(.bold))
+                .foregroundStyle(selectedMode == .liveAnalyzing ? Palette.liveMode : Palette.accent)
             Text(selectedMode.subtitle)
-                .font(.subheadline)
-                .foregroundStyle(.white.opacity(0.82))
+                .font(.headline)
+                .foregroundStyle(.white)
         }
         .foregroundStyle(.white)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
+        .padding(18)
         .background(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(.black.opacity(0.42))
+                .fill(Palette.surface)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(.white.opacity(0.12), lineWidth: 1)
+                .stroke(Palette.surfaceBorder, lineWidth: 2)
         )
     }
     
@@ -112,31 +131,54 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Label("Voice Guidance", systemImage: "speaker.wave.2.fill")
-                    .font(.subheadline.weight(.semibold))
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(Palette.accent)
                 
                 Spacer()
                 
                 if cameraManager.isProcessing {
                     ProgressView()
-                        .tint(.white)
-                        .scaleEffect(0.9)
+                        .tint(Palette.accent)
+                        .scaleEffect(1.1)
                 }
             }
             
             Text(cameraManager.latestGuide)
-                .font(.body)
-                .foregroundStyle(.white.opacity(0.94))
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.white)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .foregroundStyle(.white)
-        .padding(16)
+        .padding(18)
         .background(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(.black.opacity(0.55))
+                .fill(Palette.secondarySurface.opacity(0.96))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(.white.opacity(0.12), lineWidth: 1)
+                .stroke(Palette.accent.opacity(0.8), lineWidth: 2)
+        )
+    }
+    
+    private func detectedTextCard(text: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Detected Text", systemImage: "text.alignleft")
+                .font(.headline.weight(.bold))
+                .foregroundStyle(Palette.accent)
+            
+            Text(text)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(18)
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(Palette.surface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(Palette.surfaceBorder, lineWidth: 2)
         )
     }
     
@@ -151,20 +193,24 @@ struct ContentView: View {
                 
                 if selectedMode == .textDescription {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(size: 16, weight: .bold))
                 }
             }
-            .foregroundStyle(selectedMode == .liveAnalyzing ? .white.opacity(0.78) : .black)
+            .foregroundStyle(selectedMode == .liveAnalyzing ? .white : Palette.accentText)
             .padding(.horizontal, 18)
             .frame(maxWidth: .infinity)
-            .frame(height: 60)
+            .frame(height: 66)
             .background(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(selectedMode == .liveAnalyzing ? Color.white.opacity(0.12) : Color.white)
+                    .fill(selectedMode == .liveAnalyzing ? Palette.passiveButton : Palette.accent)
             )
         }
         .disabled(selectedMode == .liveAnalyzing || cameraManager.isProcessing)
-        .opacity(selectedMode == .liveAnalyzing ? 0.9 : 1.0)
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(selectedMode == .liveAnalyzing ? Palette.surfaceBorder : Palette.accentStrong, lineWidth: 2)
+        )
+        .opacity(selectedMode == .liveAnalyzing ? 0.96 : 1.0)
     }
     
     private var bottomModeSwitcher: some View {
@@ -175,11 +221,11 @@ struct ContentView: View {
         .padding(10)
         .background(
             RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(.ultraThinMaterial)
+                .fill(Palette.surface)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .stroke(.white.opacity(0.16), lineWidth: 1)
+                .stroke(Palette.surfaceBorder, lineWidth: 2)
         )
     }
     
@@ -192,16 +238,20 @@ struct ContentView: View {
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: mode.icon)
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.system(size: 19, weight: .bold))
                 Text(mode.rawValue)
-                    .font(.subheadline.weight(.semibold))
+                    .font(.headline.weight(.bold))
             }
-            .foregroundStyle(isActive ? .black : .white)
+            .foregroundStyle(isActive ? Palette.accentText : .white)
             .frame(maxWidth: .infinity)
-            .frame(height: 54)
+            .frame(height: 60)
             .background(
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(isActive ? Color.white : Color.white.opacity(0.08))
+                    .fill(isActive ? Palette.accent : Palette.passiveButton)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(isActive ? Palette.accentStrong : Palette.surfaceBorder, lineWidth: 2)
             )
         }
     }

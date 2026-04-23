@@ -10,6 +10,20 @@ import Combine
 import UIKit
 
 final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleBufferDelegate {
+    struct AnalysisResponse: Decodable, Sendable {
+        let status: String
+        let mode: String
+        let detectedText: String?
+        let voiceGuide: String
+        
+        enum CodingKeys: String, CodingKey {
+            case status
+            case mode
+            case detectedText = "detected_text"
+            case voiceGuide = "voice_guide"
+        }
+    }
+    
     enum ProcessingMode: String {
         case liveAnalyzing = "live"
         case textDescription = "text"
@@ -17,6 +31,7 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
     
     @Published var session = AVCaptureSession()
     @Published var latestGuide = "Live Analyzing mode is ready."
+    @Published var latestDetectedText: String?
     @Published var isProcessing = false
     
     private let output = AVCaptureVideoDataOutput()
@@ -40,18 +55,35 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
         let message: String
         switch mode {
         case .liveAnalyzing:
+            latestDetectedText = nil
             message = "Live Analyzing mode is on. The app will keep checking the scene ahead."
         case .textDescription:
             message = "Text Description mode is on. Tap the read text button to scan nearby text."
         }
         
-        updateGuide(message, shouldSpeak: true)
+        updateResponse(
+            AnalysisResponse(
+                status: "ready",
+                mode: mode.rawValue,
+                detectedText: nil,
+                voiceGuide: message
+            ),
+            shouldSpeak: true
+        )
     }
     
     func triggerTextCapture() {
         guard currentMode == .textDescription else { return }
         guard let frame = latestFrame else {
-            updateGuide("Camera frame is not ready yet. Please try again.", shouldSpeak: true)
+            updateResponse(
+                AnalysisResponse(
+                    status: "error",
+                    mode: currentMode.rawValue,
+                    detectedText: nil,
+                    voiceGuide: "Camera frame is not ready yet. Please try again."
+                ),
+                shouldSpeak: true
+            )
             return
         }
         
@@ -65,7 +97,15 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
         case .notDetermined:
             AVCaptureDevice.requestAccess(for: .video) { _ in }
         default:
-            updateGuide("Camera permission is needed to use this app.", shouldSpeak: false)
+            updateResponse(
+                AnalysisResponse(
+                    status: "error",
+                    mode: currentMode.rawValue,
+                    detectedText: nil,
+                    voiceGuide: "Camera permission is needed to use this app."
+                ),
+                shouldSpeak: false
+            )
         }
     }
     
@@ -117,21 +157,28 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
             self.isProcessing = true
         }
         
-        sendImageToServer(image: image, mode: mode) { [weak self] guide in
+        sendImageToServer(image: image, mode: mode) { [weak self] response in
             guard let self else { return }
-            self.updateGuide(guide, shouldSpeak: true)
+            self.updateResponse(response, shouldSpeak: true)
             DispatchQueue.main.async {
                 self.isProcessing = false
             }
         }
     }
     
-    private func sendImageToServer(image: UIImage, mode: ProcessingMode, completion: @escaping (String) -> Void) {
+    private func sendImageToServer(image: UIImage, mode: ProcessingMode, completion: @escaping (AnalysisResponse) -> Void) {
         guard let url = URL(string: serverURL) else {
             DispatchQueue.main.async {
                 self.isProcessing = false
             }
-            completion("Set the backend server IP address in CameraManager to start analysis.")
+            completion(
+                AnalysisResponse(
+                    status: "error",
+                    mode: mode.rawValue,
+                    detectedText: nil,
+                    voiceGuide: "Set the backend server IP address in CameraManager to start analysis."
+                )
+            )
             return
         }
         
@@ -145,7 +192,14 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
             DispatchQueue.main.async {
                 self.isProcessing = false
             }
-            completion("The camera image could not be prepared for upload.")
+            completion(
+                AnalysisResponse(
+                    status: "error",
+                    mode: mode.rawValue,
+                    detectedText: nil,
+                    voiceGuide: "The camera image could not be prepared for upload."
+                )
+            )
             return
         }
         
@@ -164,28 +218,42 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
         
         URLSession.shared.dataTask(with: request) { data, _, error in
             if let error {
-                completion("Server connection failed: \(error.localizedDescription)")
+                completion(
+                    AnalysisResponse(
+                        status: "error",
+                        mode: mode.rawValue,
+                        detectedText: nil,
+                        voiceGuide: "Server connection failed: \(error.localizedDescription)"
+                    )
+                )
                 return
             }
             
             guard let data,
-                  let responseJSON = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                completion("The server returned an unreadable response.")
+                  let response = try? JSONDecoder().decode(AnalysisResponse.self, from: data) else {
+                completion(
+                    AnalysisResponse(
+                        status: "error",
+                        mode: mode.rawValue,
+                        detectedText: nil,
+                        voiceGuide: "The server returned an unreadable response."
+                    )
+                )
                 return
             }
             
-            let guide = responseJSON["voice_guide"] as? String ?? "No guidance was returned."
-            completion(guide)
+            completion(response)
         }.resume()
     }
     
-    private func updateGuide(_ guide: String, shouldSpeak: Bool) {
+    private func updateResponse(_ response: AnalysisResponse, shouldSpeak: Bool) {
         DispatchQueue.main.async {
-            self.latestGuide = guide
+            self.latestGuide = response.voiceGuide
+            self.latestDetectedText = response.detectedText
         }
         
         guard shouldSpeak else { return }
-        speak(guide)
+        speak(response.voiceGuide)
     }
     
     private func speak(_ text: String) {
