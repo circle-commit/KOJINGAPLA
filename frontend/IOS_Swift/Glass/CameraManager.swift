@@ -41,7 +41,7 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
     private var currentMode: ProcessingMode = .liveAnalyzing
     private var lastLiveRequestDate: Date = .distantPast
     private let liveRequestInterval: TimeInterval = 2.0
-    private var serverURL = "http://192.168.0.XX:8000/analyze"
+    private var serverURL = "http://100.64.174.44:8000/analyze"
     
     override init() {
         super.init()
