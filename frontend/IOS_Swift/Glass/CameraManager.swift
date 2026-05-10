@@ -32,6 +32,7 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
     @Published var session = AVCaptureSession()
     @Published var latestGuide = "Live Analyzing mode is ready."
     @Published var latestDetectedText: String?
+    @Published var textCaptureImage: UIImage?
     @Published var isProcessing = false
     
     private let output = AVCaptureVideoDataOutput()
@@ -56,6 +57,7 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
         switch mode {
         case .liveAnalyzing:
             latestDetectedText = nil
+            textCaptureImage = nil
             message = "Live Analyzing mode is on. The app will keep checking the scene ahead."
         case .textDescription:
             message = "Text Description mode is on. Tap the read text button to scan nearby text."
@@ -87,6 +89,17 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
             return
         }
         
+        latestDetectedText = nil
+        textCaptureImage = frame
+        updateResponse(
+            AnalysisResponse(
+                status: "processing",
+                mode: currentMode.rawValue,
+                detectedText: nil,
+                voiceGuide: "Reading text now."
+            ),
+            shouldSpeak: true
+        )
         processImage(frame, mode: .textDescription)
     }
     

@@ -86,9 +86,8 @@ struct ContentView: View {
                     .padding(.horizontal, 20)
                 
                 if selectedMode == .textDescription,
-                   let detectedText = cameraManager.latestDetectedText,
-                   !detectedText.isEmpty {
-                    detectedTextCard(text: detectedText)
+                   cameraManager.textCaptureImage != nil || cameraManager.isProcessing || cameraManager.latestDetectedText != nil {
+                    textCaptureResultCard
                         .padding(.horizontal, 20)
                 }
                 
@@ -160,16 +159,58 @@ struct ContentView: View {
         )
     }
     
-    private func detectedTextCard(text: String) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label("Detected Text", systemImage: "text.alignleft")
-                .font(.headline.weight(.bold))
-                .foregroundStyle(Palette.accent)
+    private var textCaptureResultCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                Label("Captured Text", systemImage: "viewfinder")
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(Palette.accent)
+                
+                Spacer()
+                
+                if cameraManager.isProcessing {
+                    Text("Reading")
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(Palette.accentText)
+                        .padding(.horizontal, 12)
+                        .frame(height: 36)
+                        .background(
+                            Capsule()
+                                .fill(Palette.accent)
+                        )
+                }
+            }
             
-            Text(text)
-                .font(.title3.weight(.semibold))
+            if let captureImage = cameraManager.textCaptureImage {
+                Image(uiImage: captureImage)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 150)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(Palette.accent, lineWidth: 3)
+                    )
+                    .accessibilityLabel("Captured camera image used for text reading")
+            }
+            
+            Text(textCaptureDisplayText)
+                .font(.system(size: 30, weight: .bold, design: .default))
                 .foregroundStyle(.white)
+                .lineSpacing(6)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color.black)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(Palette.accent.opacity(0.9), lineWidth: 2)
+                )
+                .accessibilityLabel("Recognized text")
+                .accessibilityValue(textCaptureDisplayText)
         }
         .padding(18)
         .background(
@@ -178,8 +219,21 @@ struct ContentView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(Palette.surfaceBorder, lineWidth: 2)
+                .stroke(Palette.accent, lineWidth: 3)
         )
+    }
+    
+    private var textCaptureDisplayText: String {
+        if cameraManager.isProcessing {
+            return "Reading text from this image..."
+        }
+        
+        if let detectedText = cameraManager.latestDetectedText,
+           !detectedText.isEmpty {
+            return detectedText
+        }
+        
+        return "No readable text found."
     }
     
     private var actionCard: some View {

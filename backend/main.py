@@ -1,10 +1,23 @@
+import threading
+
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 import uvicorn
 
 from services.guide_service import analyze_live_scene
-from services.text_service import analyze_text_scene
+from services.text_service import analyze_text_scene, warm_text_ocr_model
 
 app = FastAPI()
+
+
+@app.on_event("startup")
+async def warm_ocr_model_on_startup():
+    def warm_model():
+        try:
+            warm_text_ocr_model()
+        except Exception as exc:
+            print(f"OCR warm-up skipped: {exc}")
+
+    threading.Thread(target=warm_model, daemon=True).start()
 
 
 @app.get("/health")
