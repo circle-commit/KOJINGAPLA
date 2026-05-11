@@ -1,0 +1,15 @@
+# Ubuntu 22.04 / Python 3.10
+#
+# For CPU-only PyTorch, install PyTorch first with:
+# pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+#
+# Then install the rest with:
+# pip install -r requirements.txt
+
+ultralytics>=8.2.0,<9.0.0
+opencv-python-headless>=4.9.0,<5.0.0
+numpy>=1.23.0,<2.0.0
+fastapi>=0.110.0,<1.0.0
+uvicorn[standard]>=0.27.0,<1.0.0
+python-multipart>=0.0.9,<1.0.0
+pydantic>=2.6.0,<3.0.0

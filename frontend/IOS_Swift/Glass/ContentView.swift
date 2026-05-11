@@ -32,15 +32,6 @@ struct ContentView: View {
             }
         }
         
-        var subtitle: String {
-            switch self {
-            case .liveAnalyzing:
-                return "Detect objects and warn about danger ahead"
-            case .textDescription:
-                return "Capture and read nearby text with OCR"
-            }
-        }
-        
         var actionTitle: String {
             switch self {
             case .liveAnalyzing:
@@ -76,9 +67,11 @@ struct ContentView: View {
             .ignoresSafeArea()
             
             VStack(spacing: 18) {
-                topModeCard
-                    .padding(.top, 20)
-                    .padding(.horizontal, 20)
+                if selectedMode == .liveAnalyzing {
+                    topModeCard
+                        .padding(.top, 20)
+                        .padding(.horizontal, 20)
+                }
                 
                 Spacer()
                 
@@ -109,7 +102,7 @@ struct ContentView: View {
             Label(selectedMode.rawValue, systemImage: selectedMode.icon)
                 .font(.title3.weight(.bold))
                 .foregroundStyle(selectedMode == .liveAnalyzing ? Palette.liveMode : Palette.accent)
-            Text(selectedMode.subtitle)
+            Text("Detect objects and warn about danger ahead")
                 .font(.headline)
                 .foregroundStyle(.white)
         }

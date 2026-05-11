@@ -3,3 +3,12 @@
 .LSOverride
 Icon
 Thumbs.db
+datasets/
+models/
+venv/
+__pycache__/
+*.pyc
+.env
+.idea/
+.vscode/
+aihubshell
