@@ -29,6 +29,12 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
         case textDescription = "text"
     }
     
+    private enum HapticEvent {
+        case ocrStarted
+        case ocrCompleted
+        case ocrFailed
+    }
+
     @Published var session = AVCaptureSession()
     @Published var latestGuide = "Live Analyzing mode is ready."
     @Published var latestDetectedText: String?
@@ -58,9 +64,9 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
         case .liveAnalyzing:
             latestDetectedText = nil
             textCaptureImage = nil
-            message = "Live Analyzing mode is on. The app will keep checking the scene ahead."
+            message = "Live guidance active"
         case .textDescription:
-            message = "Text Description mode is on. Tap the read text button to scan nearby text."
+            message = "OCR mode active"
         }
         
         updateResponse(
@@ -91,6 +97,7 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
         
         latestDetectedText = nil
         textCaptureImage = frame
+        playHaptic(.ocrStarted)
         updateResponse(
             AnalysisResponse(
                 status: "processing",
@@ -175,6 +182,9 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
             self.updateResponse(response, shouldSpeak: true)
             DispatchQueue.main.async {
                 self.isProcessing = false
+                if mode == .textDescription {
+                    self.playHaptic(response.status == "error" ? .ocrFailed : .ocrCompleted)
+                }
             }
         }
     }
@@ -271,13 +281,26 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
     
     private func speak(_ text: String) {
         guard !text.isEmpty else { return }
-        
+
         processingQueue.async {
             self.speechSynthesizer.stopSpeaking(at: .immediate)
             let utterance = AVSpeechUtterance(string: text)
             utterance.rate = 0.48
             utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
             self.speechSynthesizer.speak(utterance)
+        }
+    }
+
+    private func playHaptic(_ event: HapticEvent) {
+        DispatchQueue.main.async {
+            switch event {
+            case .ocrStarted:
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            case .ocrCompleted:
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+            case .ocrFailed:
+                UINotificationFeedbackGenerator().notificationOccurred(.error)
+            }
         }
     }
 }
