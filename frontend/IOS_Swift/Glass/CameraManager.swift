@@ -49,17 +49,22 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
         stabilityTracker.reset()
 
         let message: String
+        let shouldAnnounceMode: Bool
         switch mode {
         case .liveAnalyzing:
             latestDetectedText = nil
             textCaptureImage = nil
             liveOCRStatus = .searching
+            hapticManager.stopRepeatingPulses()
             message = "Live guidance active"
+            shouldAnnounceMode = true
         case .textDescription:
             latestDetectedText = nil
             textCaptureImage = nil
             liveOCRStatus = .searching
+            hapticManager.updateOCRPulseState(.searching)
             message = "OCR mode active. Point the camera at nearby text."
+            shouldAnnounceMode = false
         }
 
         updateResponse(
@@ -69,7 +74,7 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
                 detectedText: nil,
                 voiceGuide: message
             ),
-            shouldSpeak: true
+            shouldSpeak: shouldAnnounceMode
         )
     }
 
@@ -155,7 +160,7 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
 
             self.latestFrame = image
             self.lastFullOCRRequestDate = Date()
-            self.hapticManager.play(.readableTextDetected)
+            self.hapticManager.stopRepeatingPulses()
             self.runFullTextOCRFromLatestFrame(allowDuplicateSpeech: false)
         }
     }
@@ -206,7 +211,8 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
             let shouldSpeak = self.shouldSpeak(response: response, mode: mode, allowDuplicateSpeech: allowDuplicateSpeech)
 
             if shouldSpeak && mode == .textDescription {
-                self.hapticManager.play(.speechStarting)
+                self.hapticManager.stopRepeatingPulses()
+                self.hapticManager.play(.readableTextConfirmed)
             }
 
             self.updateResponse(response, shouldSpeak: shouldSpeak)
@@ -217,6 +223,8 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
                     self.liveOCRStatus = response.status == "error" ? .searching : .coolingDown
                     if response.status == "error" {
                         self.hapticManager.play(.ocrFailed)
+                    } else if !shouldSpeak {
+                        self.hapticManager.updateOCRPulseState(.searching)
                     }
                 }
             }
@@ -237,12 +245,19 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
         }
 
         guard shouldSpeak else { return }
-        speechManager.speak(response.voiceGuide)
+        hapticManager.stopRepeatingPulses()
+        speechManager.speak(response.voiceGuide) { [weak self] in
+            guard let self else { return }
+            guard self.currentMode == .textDescription else { return }
+            guard !self.isProcessing else { return }
+            self.hapticManager.updateOCRPulseState(.searching)
+        }
     }
 
     private func updateLiveOCRStatus(_ status: LiveOCRStatus) {
         DispatchQueue.main.async {
             guard self.currentMode == .textDescription else { return }
+            guard !self.isProcessing || status == .reading else { return }
 
             if self.liveOCRStatus != status {
                 self.liveOCRStatus = status
@@ -250,6 +265,19 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
 
             if self.latestDetectedText == nil || self.latestDetectedText?.isEmpty == true {
                 self.latestGuide = status.rawValue
+            }
+
+            switch status {
+            case .searching, .coolingDown:
+                if !self.isProcessing {
+                    self.hapticManager.updateOCRPulseState(.searching)
+                }
+            case .detected, .stabilizing:
+                if !self.isProcessing {
+                    self.hapticManager.updateOCRPulseState(.candidate)
+                }
+            case .reading, .unavailable:
+                self.hapticManager.stopRepeatingPulses()
             }
         }
     }
