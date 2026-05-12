@@ -16,7 +16,6 @@ private enum AppPalette {
     static let surfaceStrong = Color.black.opacity(0.94)
     static let surfaceBorder = Color.white.opacity(0.22)
     static let primary = Color(red: 1.0, green: 0.84, blue: 0.12)
-    static let primaryStrong = Color(red: 1.0, green: 0.7, blue: 0.0)
     static let primaryText = Color.black
     static let live = Color(red: 0.16, green: 0.82, blue: 0.56)
     static let warning = Color(red: 1.0, green: 0.58, blue: 0.12)
@@ -126,32 +125,24 @@ struct ContentView: View {
 
                 Spacer(minLength: 20)
 
-                VoiceGuidanceCard(
-                    message: displayGuidance,
-                    severity: .calm,
-                    isProcessing: cameraManager.isProcessing
-                )
-
                 if selectedMode == .liveAnalyzing {
+                    VoiceGuidanceCard(
+                        message: displayGuidance,
+                        severity: .calm,
+                        isProcessing: cameraManager.isProcessing
+                    )
+
                     LiveGuidancePreview(state: LiveGuidanceState.standby)
                 }
 
                 if selectedMode == .textDescription {
-                    OCRResultArea(
+                    LiveOCRPanel(
+                        status: cameraManager.liveOCRStatus,
                         text: textCaptureDisplayText,
-                        captureImage: cameraManager.textCaptureImage,
                         isProcessing: cameraManager.isProcessing,
                         hasResult: hasOCRResult
                     )
                 }
-
-                PrimaryActionButton(
-                    title: selectedMode == .textDescription ? "Scan Text" : "Listening",
-                    systemImage: selectedMode == .textDescription ? "text.magnifyingglass" : "waveform.path.ecg",
-                    isEnabled: selectedMode == .textDescription && !cameraManager.isProcessing,
-                    isProminent: selectedMode == .textDescription,
-                    action: primaryAction
-                )
 
                 BottomModeSelector(selectedMode: $selectedMode) { mode in
                     cameraManager.setMode(mode.processingMode)
@@ -167,7 +158,7 @@ struct ContentView: View {
 
     private var displayGuidance: String {
         if selectedMode == .textDescription && !cameraManager.isProcessing && cameraManager.latestDetectedText == nil {
-            return "Ready to read nearby text"
+            return cameraManager.liveOCRStatus.rawValue
         }
 
         return cameraManager.latestGuide
@@ -180,7 +171,7 @@ struct ContentView: View {
 
     private var textCaptureDisplayText: String {
         if cameraManager.isProcessing {
-            return "Reading text..."
+            return cameraManager.liveOCRStatus.rawValue
         }
 
         if let detectedText = cameraManager.latestDetectedText,
@@ -188,16 +179,7 @@ struct ContentView: View {
             return detectedText
         }
 
-        if cameraManager.textCaptureImage != nil {
-            return "No readable text found."
-        }
-
-        return "Scanned text will appear here."
-    }
-
-    private func primaryAction() {
-        guard selectedMode == .textDescription else { return }
-        cameraManager.triggerTextCapture()
+        return cameraManager.liveOCRStatus.rawValue
     }
 }
 
@@ -293,100 +275,80 @@ private struct VoiceGuidanceCard: View {
     }
 }
 
-private struct OCRResultArea: View {
+private struct LiveOCRPanel: View {
+    let status: LiveOCRStatus
     let text: String
-    let captureImage: UIImage?
     let isProcessing: Bool
     let hasResult: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Captured Text")
-                    .font(.title3.weight(.bold))
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 12) {
+                Image(systemName: statusIcon)
+                    .font(.system(size: 24, weight: .bold))
                     .foregroundStyle(AppPalette.primary)
+                    .frame(width: 36, height: 36)
 
+                Text(status.rawValue)
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                
                 Spacer()
 
                 if isProcessing {
-                    Text("Reading")
-                        .font(.headline.weight(.bold))
-                        .foregroundStyle(AppPalette.primaryText)
-                        .padding(.horizontal, 14)
-                        .frame(height: 40)
-                        .background(Capsule().fill(AppPalette.primary))
+                    ProgressView()
+                        .tint(AppPalette.primary)
+                        .scaleEffect(1.2)
+                        .accessibilityLabel("Reading text")
                 }
             }
 
-            if captureImage != nil && !hasResult && !isProcessing {
-                Text("Try moving closer or holding the camera steady.")
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.74))
+            if hasResult {
+                ScrollView {
+                    Text(text)
+                        .font(.system(size: 28, weight: .semibold))
+                        .lineSpacing(8)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 4)
+                }
+                .frame(maxWidth: .infinity)
+                .frame(minHeight: 96, maxHeight: 220)
+                .accessibilityLabel("Recognized text")
+                .accessibilityValue(text)
             }
-
-            ScrollView {
-                Text(text)
-                    .font(.system(size: 28, weight: .semibold))
-                    .lineSpacing(8)
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(18)
-            }
-            .frame(maxWidth: .infinity)
-            .frame(minHeight: 180, maxHeight: 260)
-            .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(Color.black.opacity(0.96))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(AppPalette.primary.opacity(0.85), lineWidth: 2)
-            )
-            .accessibilityLabel("Recognized text")
-            .accessibilityValue(text)
         }
-        .padding(18)
+        .padding(20)
         .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(AppPalette.surface)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(AppPalette.surfaceStrong)
         )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(AppPalette.primary.opacity(isProcessing || hasResult ? 0.95 : 0.62), lineWidth: 2)
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(status.accessibilityLabel)
     }
-}
 
-private struct PrimaryActionButton: View {
-    let title: String
-    let systemImage: String
-    let isEnabled: Bool
-    let isProminent: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 12) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 24, weight: .bold))
-
-                Text(title)
-                    .font(.title3.weight(.bold))
-
-                Spacer()
-            }
-            .foregroundStyle(isProminent ? AppPalette.primaryText : .white)
-            .padding(.horizontal, 22)
-            .frame(maxWidth: .infinity)
-            .frame(height: 72)
-            .background(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(isProminent ? AppPalette.primary : AppPalette.passiveButton)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(isProminent ? AppPalette.primaryStrong : AppPalette.surfaceBorder, lineWidth: 2)
-            )
+    private var statusIcon: String {
+        switch status {
+        case .searching:
+            return "viewfinder"
+        case .detected:
+            return "text.viewfinder"
+        case .stabilizing:
+            return "scope"
+        case .reading:
+            return "speaker.wave.2.fill"
+        case .coolingDown:
+            return "ear"
+        case .unavailable:
+            return "camera.fill"
         }
-        .disabled(!isEnabled)
-        .opacity(isEnabled || !isProminent ? 1.0 : 0.72)
-        .accessibilityLabel(title)
     }
 }
 
