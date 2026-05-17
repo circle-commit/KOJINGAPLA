@@ -83,6 +83,12 @@ private enum GuidanceSeverity {
     }
 }
 
+private enum GuidanceDirection: String, CaseIterable {
+    case left = "Left"
+    case center = "Center"
+    case right = "Right"
+}
+
 struct ContentView: View {
     @StateObject private var cameraManager = CameraManager()
     @State private var selectedMode: CameraMode = .liveAnalyzing
@@ -110,6 +116,11 @@ struct ContentView: View {
                         message: displayGuidance,
                         severity: .calm,
                         isProcessing: cameraManager.isProcessing
+                    )
+
+                    DirectionGuidanceStrip(
+                        activeDirection: .center,
+                        severity: .warning
                     )
                 }
 
@@ -375,5 +386,63 @@ private struct BottomModeSelector: View {
         }
         .accessibilityLabel(mode.title)
         .accessibilityAddTraits(isActive ? .isSelected : [])
+    }
+}
+
+private struct DirectionGuidanceStrip: View {
+    let activeDirection: GuidanceDirection
+    let severity: GuidanceSeverity
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(GuidanceDirection.allCases, id: \.self) { direction in
+                DirectionSegment(
+                    direction: direction,
+                    isActive: direction == activeDirection,
+                    severity: severity
+                )
+            }
+        }
+        .frame(height: 64)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Danger direction")
+        .accessibilityValue(activeDirection.rawValue)
+    }
+}
+
+private struct DirectionSegment: View {
+    let direction: GuidanceDirection
+    let isActive: Bool
+    let severity: GuidanceSeverity
+
+    var body: some View {
+        VStack(spacing: 5) {
+            Image(systemName: iconName)
+                .font(.system(size: 20, weight: .bold))
+            Text(direction.rawValue)
+                .font(.caption.weight(.bold))
+        }
+        .foregroundStyle(isActive ? AppPalette.primaryText : .white.opacity(0.78))
+        .frame(maxWidth: .infinity)
+        .frame(height: 64)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(isActive ? severity.tint : AppPalette.passiveButton)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(isActive ? Color.white.opacity(0.65) : AppPalette.surfaceBorder, lineWidth: 2)
+        )
+    }
+
+    private var iconName: String {
+        switch direction {
+        case .left:
+            return "arrow.left"
+        case .center:
+            return "arrow.up"
+        case .right:
+            return "arrow.right"
+        }
     }
 }
