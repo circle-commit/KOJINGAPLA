@@ -272,9 +272,13 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
                 if !self.isProcessing {
                     self.hapticManager.updateOCRPulseState(.searching)
                 }
-            case .detected, .stabilizing:
+            case .detected:
                 if !self.isProcessing {
-                    self.hapticManager.updateOCRPulseState(.candidate)
+                    self.hapticManager.updateOCRPulseState(.detected)
+                }
+            case .stabilizing:
+                if !self.isProcessing {
+                    self.hapticManager.updateOCRPulseState(.stabilizing)
                 }
             case .reading, .unavailable:
                 self.hapticManager.stopRepeatingPulses()

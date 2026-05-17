@@ -18,7 +18,7 @@ final class SpeechManager: NSObject, AVSpeechSynthesizerDelegate {
 
             let utterance = AVSpeechUtterance(string: text)
             utterance.rate = 0.48
-            utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
+            utterance.voice = AVSpeechSynthesisVoice(language: self.voiceLanguage(for: text))
             self.synthesizer.speak(utterance)
         }
     }
@@ -42,5 +42,11 @@ final class SpeechManager: NSObject, AVSpeechSynthesizerDelegate {
         let completion = onFinish
         onFinish = nil
         completion?()
+    }
+
+    private func voiceLanguage(for text: String) -> String {
+        text.unicodeScalars.contains { scalar in
+            (0xAC00...0xD7AF).contains(Int(scalar.value))
+        } ? "ko-KR" : "en-US"
     }
 }

@@ -4,7 +4,7 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 import uvicorn
 
 from services.guide_service import analyze_live_scene
-from services.text_service import analyze_text_scene, warm_text_ocr_model
+from services.text_service import analyze_text_scene, get_text_ocr_status, warm_text_ocr_model
 
 app = FastAPI()
 
@@ -23,6 +23,11 @@ async def warm_ocr_model_on_startup():
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}
+
+
+@app.get("/health/ocr")
+async def ocr_health_check():
+    return get_text_ocr_status()
 
 
 @app.post("/analyze")

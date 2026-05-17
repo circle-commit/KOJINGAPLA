@@ -7,7 +7,8 @@ enum HapticEvent {
 
 enum OCRHapticPulseState {
     case searching
-    case candidate
+    case detected
+    case stabilizing
 }
 
 struct OCRHapticConfiguration {
@@ -17,10 +18,10 @@ struct OCRHapticConfiguration {
     let timeoutIntervalAfterNoText: TimeInterval
 
     static let standard = OCRHapticConfiguration(
-        searchingInterval: 1.8,
-        candidateInterval: 1.0,
+        searchingInterval: 0.9,
+        candidateInterval: 0.45,
         timeoutInterval: 12.0,
-        timeoutIntervalAfterNoText: 4.0
+        timeoutIntervalAfterNoText: 1.5
     )
 }
 
@@ -29,10 +30,15 @@ final class HapticFeedbackManager: NSObject {
     private var pulseTimer: Timer?
     private var pulseState: OCRHapticPulseState?
     private var pulseStartedAt: Date?
+    private let searchingGenerator = UIImpactFeedbackGenerator(style: .heavy)
+    private let candidateGenerator = UIImpactFeedbackGenerator(style: .heavy)
+    private let confirmationGenerator = UIImpactFeedbackGenerator(style: .heavy)
+    private let notificationGenerator = UINotificationFeedbackGenerator()
 
     init(configuration: OCRHapticConfiguration = .standard) {
         self.configuration = configuration
         super.init()
+        prepareGenerators()
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(stopRepeatingPulses),
@@ -52,6 +58,7 @@ final class HapticFeedbackManager: NSObject {
 
             self.pulseState = state
             self.pulseStartedAt = Date()
+            self.emitPulse(for: state)
             self.scheduleNextPulse(after: self.interval(for: state))
         }
     }
@@ -74,25 +81,59 @@ final class HapticFeedbackManager: NSObject {
         DispatchQueue.main.async {
             switch event {
             case .readableTextConfirmed:
-                UIImpactFeedbackGenerator(style: .medium).impactOccurred(intensity: 0.75)
+                self.emitStrongDoublePulse()
+                self.notificationGenerator.notificationOccurred(.success)
+                self.prepareGenerators()
             case .ocrFailed:
-                UINotificationFeedbackGenerator().notificationOccurred(.error)
+                self.notificationGenerator.notificationOccurred(.error)
             }
         }
     }
 
     private func scheduleNextPulse(after interval: TimeInterval) {
         pulseTimer?.invalidate()
-        pulseTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
+        let timer = Timer(timeInterval: interval, repeats: false) { [weak self] _ in
             self?.emitPulseAndReschedule()
         }
+        RunLoop.main.add(timer, forMode: .common)
+        pulseTimer = timer
     }
 
     private func emitPulseAndReschedule() {
         guard let pulseState else { return }
 
-        UIImpactFeedbackGenerator(style: .light).impactOccurred(intensity: 0.42)
+        emitPulse(for: pulseState)
         scheduleNextPulse(after: interval(for: pulseState))
+    }
+
+    private func emitPulse(for state: OCRHapticPulseState) {
+        switch state {
+        case .searching:
+            searchingGenerator.impactOccurred(intensity: 1.0)
+            searchingGenerator.prepare()
+        case .detected:
+            emitStrongDoublePulse()
+            notificationGenerator.notificationOccurred(.warning)
+            prepareGenerators()
+        case .stabilizing:
+            emitStrongDoublePulse()
+            prepareGenerators()
+        }
+    }
+
+    private func prepareGenerators() {
+        searchingGenerator.prepare()
+        candidateGenerator.prepare()
+        confirmationGenerator.prepare()
+        notificationGenerator.prepare()
+    }
+
+    private func emitStrongDoublePulse() {
+        candidateGenerator.impactOccurred(intensity: 1.0)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
+            self?.confirmationGenerator.impactOccurred(intensity: 1.0)
+            self?.confirmationGenerator.prepare()
+        }
     }
 
     private func interval(for state: OCRHapticPulseState) -> TimeInterval {
@@ -104,7 +145,7 @@ final class HapticFeedbackManager: NSObject {
         switch state {
         case .searching:
             return configuration.searchingInterval
-        case .candidate:
+        case .detected, .stabilizing:
             return configuration.candidateInterval
         }
     }

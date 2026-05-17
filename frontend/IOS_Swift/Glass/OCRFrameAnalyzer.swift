@@ -16,14 +16,16 @@ struct OCRFrameAnalysis {
 
 final class OCRFrameAnalyzer {
     private let queue = DispatchQueue(label: "glass.ocr.frame-analyzer", qos: .userInitiated)
-    private let request = VNDetectTextRectanglesRequest()
+    private let request = VNRecognizeTextRequest()
     private var previousLumaSample: [Double]?
     private var isAnalyzing = false
     private var lastAnalysisDate: Date = .distantPast
     private let minimumFrameInterval: TimeInterval = 0.16
 
     init() {
-        request.reportCharacterBoxes = false
+        request.recognitionLevel = .accurate
+        request.usesLanguageCorrection = true
+        request.recognitionLanguages = preferredRecognitionLanguages(for: request)
     }
 
     func analyze(sampleBuffer: CMSampleBuffer, completion: @escaping (OCRFrameAnalysis) -> Void) {
@@ -64,7 +66,21 @@ final class OCRFrameAnalyzer {
         }
     }
 
-    private func mergedBoundingBox(for observations: [VNTextObservation]) -> CGRect? {
+    private func preferredRecognitionLanguages(for request: VNRecognizeTextRequest) -> [String] {
+        let preferred = ["ko-KR", "en-US"]
+
+        guard let supported = try? VNRecognizeTextRequest.supportedRecognitionLanguages(
+            for: request.recognitionLevel,
+            revision: request.revision
+        ) else {
+            return preferred
+        }
+
+        let available = preferred.filter { supported.contains($0) }
+        return available.isEmpty ? preferred : available
+    }
+
+    private func mergedBoundingBox(for observations: [VNRecognizedTextObservation]) -> CGRect? {
         guard let first = observations.first else { return nil }
 
         return observations.dropFirst().reduce(first.boundingBox) { partial, observation in

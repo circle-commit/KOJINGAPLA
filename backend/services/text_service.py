@@ -2,17 +2,19 @@ from __future__ import annotations
 
 import os
 import tempfile
+import threading
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from ocr_runtime import configure_ocr_environment
 
-_BACKEND_DIR = Path(__file__).resolve().parents[1]
-_DEFAULT_PADDLEX_CACHE = _BACKEND_DIR / ".paddlex"
+
+_OCR_MODEL_LOCK = threading.Lock()
 
 
 class OCRUnavailableError(RuntimeError):
-    """Raised when the configured OCR backend is not installed."""
+    """Raised when the configured OCR backend cannot be used."""
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -24,10 +26,8 @@ def _env_bool(name: str, default: bool) -> bool:
 
 
 @lru_cache(maxsize=1)
-def _load_ocr_model() -> Any:
-    os.environ.setdefault("PADDLE_PDX_CACHE_HOME", str(_DEFAULT_PADDLEX_CACHE))
-    os.environ.setdefault("PADDLE_PDX_ENABLE_MKLDNN_BYDEFAULT", "False")
-    _DEFAULT_PADDLEX_CACHE.mkdir(parents=True, exist_ok=True)
+def _load_ocr_model_cached() -> Any:
+    configure_ocr_environment()
 
     try:
         from paddleocr import PaddleOCR
@@ -36,15 +36,31 @@ def _load_ocr_model() -> Any:
             "PaddleOCR is not installed. Install paddleocr and paddlepaddle "
             "to enable Text Description mode."
         ) from exc
+    except Exception as exc:
+        raise OCRUnavailableError(
+            "PaddleOCR could not be imported. Make sure the backend is started "
+            "from the project virtual environment and the OCR cache path is writable."
+        ) from exc
 
-    # PP-OCRv5 is PaddleOCR's current general OCR generation. PaddleOCR picks
-    # the matching detector/recognizer for the installed package version.
-    return PaddleOCR(
-        lang=os.getenv("OCR_LANG", "korean"),
-        use_doc_orientation_classify=_env_bool("OCR_USE_DOC_ORIENTATION", False),
-        use_doc_unwarping=_env_bool("OCR_USE_DOC_UNWARPING", False),
-        use_textline_orientation=_env_bool("OCR_USE_TEXTLINE_ORIENTATION", False),
-    )
+    try:
+        # PP-OCRv5 is PaddleOCR's current general OCR generation. PaddleOCR picks
+        # the matching detector/recognizer for the installed package version.
+        return PaddleOCR(
+            lang=os.getenv("OCR_LANG", "korean"),
+            use_doc_orientation_classify=_env_bool("OCR_USE_DOC_ORIENTATION", False),
+            use_doc_unwarping=_env_bool("OCR_USE_DOC_UNWARPING", False),
+            use_textline_orientation=_env_bool("OCR_USE_TEXTLINE_ORIENTATION", False),
+        )
+    except Exception as exc:
+        raise OCRUnavailableError(
+            "PaddleOCR could not be initialized. Install the OCR dependencies "
+            "and make sure the server can download or read the OCR model files."
+        ) from exc
+
+
+def _load_ocr_model() -> Any:
+    with _OCR_MODEL_LOCK:
+        return _load_ocr_model_cached()
 
 
 def _score_to_float(score: Any) -> float:
@@ -131,6 +147,23 @@ def _extract_text(image_bytes: bytes) -> str:
 
 def warm_text_ocr_model() -> None:
     _load_ocr_model()
+
+
+def get_text_ocr_status() -> dict[str, str | bool]:
+    try:
+        _load_ocr_model()
+    except OCRUnavailableError as exc:
+        return {
+            "available": False,
+            "detail": str(exc),
+            "cache_dir": os.environ.get("PADDLE_PDX_CACHE_HOME", ""),
+        }
+
+    return {
+        "available": True,
+        "detail": "PaddleOCR is ready.",
+        "cache_dir": os.environ.get("PADDLE_PDX_CACHE_HOME", ""),
+    }
 
 
 def analyze_text_scene(image_bytes: bytes) -> dict:

@@ -13,3 +13,9 @@ fastapi>=0.110.0,<1.0.0
 uvicorn[standard]>=0.27.0,<1.0.0
 python-multipart>=0.0.9,<1.0.0
 pydantic>=2.6.0,<3.0.0
+
+# Text Description / OCR mode.
+# PaddleOCR's official CPU install guide uses PaddlePaddle's package index.
+--extra-index-url https://www.paddlepaddle.org.cn/packages/stable/cpu/
+paddlepaddle>=3.2.0,<4.0.0
+paddleocr>=3.3.0,<4.0.0
