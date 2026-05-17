@@ -83,26 +83,6 @@ private enum GuidanceSeverity {
     }
 }
 
-private enum GuidanceDirection: String, CaseIterable {
-    case left = "Left"
-    case center = "Center"
-    case right = "Right"
-}
-
-private struct LiveGuidanceState {
-    let severity: GuidanceSeverity
-    let direction: GuidanceDirection
-    let message: String
-    let isApproaching: Bool
-
-    static let standby = LiveGuidanceState(
-        severity: .calm,
-        direction: .center,
-        message: "Monitoring forward scene",
-        isApproaching: false
-    )
-}
-
 struct ContentView: View {
     @StateObject private var cameraManager = CameraManager()
     @State private var selectedMode: CameraMode = .liveAnalyzing
@@ -131,8 +111,6 @@ struct ContentView: View {
                         severity: .calm,
                         isProcessing: cameraManager.isProcessing
                     )
-
-                    LiveGuidancePreview(state: LiveGuidanceState.standby)
                 }
 
                 if selectedMode == .textDescription {
@@ -397,99 +375,5 @@ private struct BottomModeSelector: View {
         }
         .accessibilityLabel(mode.title)
         .accessibilityAddTraits(isActive ? .isSelected : [])
-    }
-}
-
-private struct LiveGuidancePreview: View {
-    let state: LiveGuidanceState
-
-    var body: some View {
-        VStack(spacing: 12) {
-            DangerWarningBanner(severity: state.severity, message: state.message, isApproaching: state.isApproaching)
-            DirectionGuidanceStrip(activeDirection: state.direction, severity: state.severity)
-        }
-        .accessibilityElement(children: .combine)
-    }
-}
-
-private struct DangerWarningBanner: View {
-    let severity: GuidanceSeverity
-    let message: String
-    let isApproaching: Bool
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: isApproaching ? "arrow.down.forward.and.arrow.up.backward" : severity.icon)
-                .font(.system(size: 22, weight: .bold))
-                .foregroundStyle(severity.tint)
-                .frame(width: 32)
-
-            Text(message)
-                .font(.headline.weight(.bold))
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .lineLimit(2)
-        }
-        .padding(.horizontal, 18)
-        .frame(minHeight: 64)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(AppPalette.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(severity.tint.opacity(0.75), lineWidth: 2)
-        )
-    }
-}
-
-private struct DirectionGuidanceStrip: View {
-    let activeDirection: GuidanceDirection
-    let severity: GuidanceSeverity
-
-    var body: some View {
-        HStack(spacing: 8) {
-            ForEach(GuidanceDirection.allCases, id: \.self) { direction in
-                DirectionSegment(
-                    direction: direction,
-                    isActive: direction == activeDirection,
-                    severity: severity
-                )
-            }
-        }
-        .frame(height: 58)
-    }
-}
-
-private struct DirectionSegment: View {
-    let direction: GuidanceDirection
-    let isActive: Bool
-    let severity: GuidanceSeverity
-
-    var body: some View {
-        VStack(spacing: 4) {
-            Image(systemName: iconName)
-                .font(.system(size: 18, weight: .bold))
-            Text(direction.rawValue)
-                .font(.caption.weight(.bold))
-        }
-        .foregroundStyle(isActive ? AppPalette.primaryText : .white.opacity(0.72))
-        .frame(maxWidth: .infinity)
-        .frame(height: 58)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(isActive ? severity.tint : AppPalette.passiveButton)
-        )
-    }
-
-    private var iconName: String {
-        switch direction {
-        case .left:
-            return "arrow.left"
-        case .center:
-            return "arrow.up"
-        case .right:
-            return "arrow.right"
-        }
     }
 }
