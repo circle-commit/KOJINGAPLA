@@ -114,13 +114,13 @@ struct ContentView: View {
                 if selectedMode == .liveAnalyzing {
                     VoiceGuidanceCard(
                         message: displayGuidance,
-                        severity: .calm,
+                        severity: liveGuidanceSeverity,
                         isProcessing: cameraManager.isProcessing
                     )
 
                     DirectionGuidanceStrip(
-                        activeDirection: .center,
-                        severity: .warning
+                        activeDirection: liveGuidanceDirection,
+                        severity: liveGuidanceSeverity
                     )
                 }
 
@@ -169,6 +169,29 @@ struct ContentView: View {
         }
 
         return cameraManager.liveOCRStatus.rawValue
+    }
+
+    private var liveGuidanceDirection: GuidanceDirection {
+        switch cameraManager.latestLiveDirection {
+        case "left":
+            return .left
+        case "right":
+            return .right
+        default:
+            return .center
+        }
+    }
+
+    private var liveGuidanceSeverity: GuidanceSeverity {
+        if cameraManager.latestLiveRiskScore >= 85 {
+            return .danger
+        }
+
+        if cameraManager.latestLiveRiskScore >= 55 {
+            return .warning
+        }
+
+        return .calm
     }
 }
 

@@ -21,6 +21,8 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
     @Published var textCaptureImage: UIImage?
     @Published var isProcessing = false
     @Published var liveOCRStatus: LiveOCRStatus = .searching
+    @Published var latestLiveDirection = "center"
+    @Published var latestLiveRiskScore = 0
 
     private let output = AVCaptureVideoDataOutput()
     private let imageContext = CIContext()
@@ -55,6 +57,8 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
             latestDetectedText = nil
             textCaptureImage = nil
             liveOCRStatus = .searching
+            latestLiveDirection = "center"
+            latestLiveRiskScore = 0
             hapticManager.stopRepeatingPulses()
             message = "Live guidance active"
             shouldAnnounceMode = true
@@ -62,6 +66,8 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
             latestDetectedText = nil
             textCaptureImage = nil
             liveOCRStatus = .searching
+            latestLiveDirection = "center"
+            latestLiveRiskScore = 0
             hapticManager.updateOCRPulseState(.searching)
             message = "OCR mode active. Point the camera at nearby text."
             shouldAnnounceMode = false
@@ -72,7 +78,9 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
                 status: "ready",
                 mode: mode.rawValue,
                 detectedText: nil,
-                voiceGuide: message
+                voiceGuide: message,
+                warnings: nil,
+                detections: nil
             ),
             shouldSpeak: shouldAnnounceMode
         )
@@ -95,7 +103,9 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
                     status: "error",
                     mode: currentMode.rawValue,
                     detectedText: nil,
-                    voiceGuide: "Camera permission is needed to use this app."
+                    voiceGuide: "Camera permission is needed to use this app.",
+                    warnings: nil,
+                    detections: nil
                 ),
                 shouldSpeak: false
             )
@@ -173,7 +183,9 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
                     status: "error",
                     mode: currentMode.rawValue,
                     detectedText: nil,
-                    voiceGuide: "Camera frame is not ready yet. Please try again."
+                    voiceGuide: "Camera frame is not ready yet. Please try again.",
+                    warnings: nil,
+                    detections: nil
                 ),
                 shouldSpeak: true
             )
@@ -242,6 +254,7 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
         DispatchQueue.main.async {
             self.latestGuide = response.voiceGuide
             self.latestDetectedText = response.detectedText
+            self.updateLiveGuidanceState(from: response)
         }
 
         guard shouldSpeak else { return }
@@ -252,6 +265,19 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
             guard !self.isProcessing else { return }
             self.hapticManager.updateOCRPulseState(.searching)
         }
+    }
+
+    private func updateLiveGuidanceState(from response: AnalysisResponse) {
+        guard response.mode == ProcessingMode.liveAnalyzing.rawValue else { return }
+        guard response.status != "error",
+              let primaryDetection = response.detections?.first else {
+            latestLiveDirection = "center"
+            latestLiveRiskScore = 0
+            return
+        }
+
+        latestLiveDirection = primaryDetection.position ?? "center"
+        latestLiveRiskScore = primaryDetection.riskScore ?? 0
     }
 
     private func updateLiveOCRStatus(_ status: LiveOCRStatus) {

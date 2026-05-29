@@ -1,7 +1,7 @@
 """Validate a trained YOLOv8 checkpoint.
 
 Run from the repository root:
-    python -m vision.validate --weights runs/sidewalk/yolov8n_sidewalk/weights/best.pt
+    python -m vision.validate --weights runs/detect/runs/sidewalk/yolov8n_sidewalk-3/weights/best.pt
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from ultralytics import YOLO
 
 
 DEFAULT_DATA = Path("datasets/yolo_sidewalk/data.yaml")
-DEFAULT_WEIGHTS = Path("runs/sidewalk/yolov8n_sidewalk/weights/best.pt")
+DEFAULT_WEIGHTS = Path("runs/detect/runs/sidewalk/yolov8n_sidewalk-3/weights/best.pt")
 
 
 def parse_args() -> argparse.Namespace:
@@ -50,4 +50,3 @@ def validate() -> None:
 
 if __name__ == "__main__":
     validate()
-

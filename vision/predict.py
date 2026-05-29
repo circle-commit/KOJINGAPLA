@@ -18,7 +18,7 @@ from ultralytics import YOLO
 from vision.tracker_logic import ApproachTracker, Detection
 
 
-DEFAULT_WEIGHTS = Path("runs/sidewalk/yolov8n_sidewalk/weights/best.pt")
+DEFAULT_WEIGHTS = Path("runs/detect/runs/sidewalk/yolov8n_sidewalk-3/weights/best.pt")
 
 
 @dataclass(frozen=True)

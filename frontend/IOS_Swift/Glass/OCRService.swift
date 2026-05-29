@@ -14,7 +14,9 @@ final class OCRService {
                     status: "error",
                     mode: mode.rawValue,
                     detectedText: nil,
-                    voiceGuide: "Set the backend server IP address in CameraManager to start analysis."
+                    voiceGuide: "Set the backend server IP address in CameraManager to start analysis.",
+                    warnings: nil,
+                    detections: nil
                 )
             )
             return
@@ -32,7 +34,9 @@ final class OCRService {
                     status: "error",
                     mode: mode.rawValue,
                     detectedText: nil,
-                    voiceGuide: "The camera image could not be prepared for upload."
+                    voiceGuide: "The camera image could not be prepared for upload.",
+                    warnings: nil,
+                    detections: nil
                 )
             )
             return
@@ -58,7 +62,9 @@ final class OCRService {
                         status: "error",
                         mode: mode.rawValue,
                         detectedText: nil,
-                        voiceGuide: "Server connection failed: \(error.localizedDescription)"
+                        voiceGuide: "Server connection failed: \(error.localizedDescription)",
+                        warnings: nil,
+                        detections: nil
                     )
                 )
                 return
@@ -71,7 +77,9 @@ final class OCRService {
                         status: "error",
                         mode: mode.rawValue,
                         detectedText: nil,
-                        voiceGuide: "The server returned an unreadable response."
+                        voiceGuide: "The server returned an unreadable response.",
+                        warnings: nil,
+                        detections: nil
                     )
                 )
                 return

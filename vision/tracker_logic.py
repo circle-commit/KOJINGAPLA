@@ -44,6 +44,7 @@ class ApproachAlert:
     track_id: int
     label: str
     confidence: float
+    bbox_xyxy: tuple[float, float, float, float]
     growth_ratio: float
     direction: str
     message: str
@@ -184,6 +185,7 @@ class ApproachTracker:
             track_id=track.track_id,
             label=track.label,
             confidence=track.confidence,
+            bbox_xyxy=track.bbox_xyxy,
             growth_ratio=round(growth_ratio, 2),
             direction=direction,
             message=f"{track.label} approaching from {direction}",
@@ -197,4 +199,3 @@ class ApproachTracker:
         ]
         for track_id in expired:
             del self._tracks[track_id]
-
