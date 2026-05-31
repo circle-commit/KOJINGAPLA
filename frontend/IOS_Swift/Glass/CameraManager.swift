@@ -197,7 +197,6 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
             return
         }
 
-        latestDetectedText = nil
         textCaptureImage = frame
         updateLiveOCRStatus(.reading)
         processImage(frame, mode: .textDescription, allowDuplicateSpeech: allowDuplicateSpeech)

@@ -159,10 +159,6 @@ struct ContentView: View {
     }
 
     private var textCaptureDisplayText: String {
-        if cameraManager.isProcessing {
-            return cameraManager.liveOCRStatus.rawValue
-        }
-
         if let detectedText = cameraManager.latestDetectedText,
            !detectedText.isEmpty {
             return detectedText
