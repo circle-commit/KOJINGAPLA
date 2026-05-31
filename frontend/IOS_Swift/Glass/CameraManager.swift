@@ -16,7 +16,7 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
     }
 
     @Published var session = AVCaptureSession()
-    @Published var latestGuide = "Live Analyzing mode is ready."
+    @Published var latestGuide = "실시간 안내 모드가 준비되었습니다."
     @Published var latestDetectedText: String?
     @Published var textCaptureImage: UIImage?
     @Published var isProcessing = false
@@ -60,7 +60,7 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
             latestLiveDirection = "center"
             latestLiveRiskScore = 0
             hapticManager.stopRepeatingPulses()
-            message = "Live guidance active"
+            message = "실시간 보행 안내를 시작합니다."
             shouldAnnounceMode = true
         case .textDescription:
             latestDetectedText = nil
@@ -69,7 +69,7 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
             latestLiveDirection = "center"
             latestLiveRiskScore = 0
             hapticManager.updateOCRPulseState(.searching)
-            message = "OCR mode active. Point the camera at nearby text."
+            message = "문자 읽기 모드입니다. 카메라를 가까운 문자에 맞춰주세요."
             shouldAnnounceMode = false
         }
 
@@ -103,7 +103,7 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
                     status: "error",
                     mode: currentMode.rawValue,
                     detectedText: nil,
-                    voiceGuide: "Camera permission is needed to use this app.",
+                    voiceGuide: "이 앱을 사용하려면 카메라 권한이 필요합니다.",
                     warnings: nil,
                     detections: nil
                 ),
@@ -153,6 +153,11 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
     }
 
     private func analyzeTextFrame(_ sampleBuffer: CMSampleBuffer) {
+        let candidateFrame = imageFromSampleBuffer(sampleBuffer)
+        if let candidateFrame {
+            latestFrame = candidateFrame
+        }
+
         frameAnalyzer.analyze(sampleBuffer: sampleBuffer) { [weak self] analysis in
             guard let self else { return }
 
@@ -166,7 +171,7 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
                 self.updateLiveOCRStatus(.coolingDown)
                 return
             }
-            guard let image = self.imageFromSampleBuffer(sampleBuffer) else { return }
+            guard let image = candidateFrame else { return }
 
             self.latestFrame = image
             self.lastFullOCRRequestDate = Date()
@@ -183,7 +188,7 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
                     status: "error",
                     mode: currentMode.rawValue,
                     detectedText: nil,
-                    voiceGuide: "Camera frame is not ready yet. Please try again.",
+                    voiceGuide: "카메라 화면이 아직 준비되지 않았습니다. 다시 시도해 주세요.",
                     warnings: nil,
                     detections: nil
                 ),

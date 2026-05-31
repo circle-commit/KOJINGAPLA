@@ -175,21 +175,21 @@ def analyze_text_scene(image_bytes: bytes) -> dict:
             "mode": "text",
             "detected_text": "",
             "voice_guide": (
-                "Text Description mode. "
-                "The OCR model is not available on the server."
+                "문자 읽기 모드입니다. "
+                "서버에서 OCR 모델을 사용할 수 없습니다."
             ),
             "detail": str(exc),
         }
 
     if detected_text:
         voice_guide = (
-            "Text Description mode. "
-            f"I found text that says: {detected_text}"
+            "문자 읽기 모드입니다. "
+            f"인식된 문자는 다음과 같습니다. {detected_text}"
         )
     else:
         voice_guide = (
-            "Text Description mode. "
-            "I could not find readable text in the current frame."
+            "문자 읽기 모드입니다. "
+            "현재 화면에서 읽을 수 있는 문자를 찾지 못했습니다."
         )
 
     return {

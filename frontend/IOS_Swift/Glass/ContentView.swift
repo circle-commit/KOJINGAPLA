@@ -24,8 +24,8 @@ private enum AppPalette {
 }
 
 private enum CameraMode: String, CaseIterable {
-    case liveAnalyzing = "Live"
-    case textDescription = "OCR"
+    case liveAnalyzing = "실시간"
+    case textDescription = "문자 읽기"
 
     var icon: String {
         switch self {
@@ -39,9 +39,9 @@ private enum CameraMode: String, CaseIterable {
     var title: String {
         switch self {
         case .liveAnalyzing:
-            return "Live Guidance"
+            return "보행 안내"
         case .textDescription:
-            return "OCR Mode"
+            return "문자 읽기"
         }
     }
 
@@ -84,9 +84,9 @@ private enum GuidanceSeverity {
 }
 
 private enum GuidanceDirection: String, CaseIterable {
-    case left = "Left"
-    case center = "Center"
-    case right = "Right"
+    case left = "왼쪽"
+    case center = "정면"
+    case right = "오른쪽"
 }
 
 struct ContentView: View {
@@ -222,7 +222,7 @@ private struct ModeHeader: View {
                 ProgressView()
                     .tint(AppPalette.primary)
                     .scaleEffect(1.25)
-                    .accessibilityLabel("Processing")
+                    .accessibilityLabel("처리 중")
             }
         }
         .frame(minHeight: 62)
@@ -231,14 +231,14 @@ private struct ModeHeader: View {
 
     private var statusText: String {
         if isProcessing {
-            return "Working"
+            return "처리 중"
         }
 
         switch mode {
         case .liveAnalyzing:
-            return "Scene monitoring"
+            return "주변 확인 중"
         case .textDescription:
-            return "Ready"
+            return "준비됨"
         }
     }
 }
@@ -256,7 +256,7 @@ private struct VoiceGuidanceCard: View {
                     .foregroundStyle(severity.tint)
                     .frame(width: 34)
 
-                Text("Guidance")
+                Text("안내")
                     .font(.headline.weight(.bold))
                     .foregroundStyle(severity.tint)
 
@@ -282,7 +282,7 @@ private struct VoiceGuidanceCard: View {
                 .stroke(severity.tint.opacity(isProcessing ? 1.0 : 0.8), lineWidth: 3)
         )
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Voice guidance")
+        .accessibilityLabel("음성 안내")
         .accessibilityValue(message)
     }
 }
@@ -314,7 +314,7 @@ private struct LiveOCRPanel: View {
                     ProgressView()
                         .tint(AppPalette.primary)
                         .scaleEffect(1.2)
-                        .accessibilityLabel("Reading text")
+                        .accessibilityLabel("문자 읽는 중")
                 }
             }
 
@@ -329,7 +329,7 @@ private struct LiveOCRPanel: View {
                 }
                 .frame(maxWidth: .infinity)
                 .frame(minHeight: 96, maxHeight: 220)
-                .accessibilityLabel("Recognized text")
+                .accessibilityLabel("인식된 문자")
                 .accessibilityValue(text)
             }
         }
@@ -428,7 +428,7 @@ private struct DirectionGuidanceStrip: View {
         }
         .frame(height: 64)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Danger direction")
+        .accessibilityLabel("위험 방향")
         .accessibilityValue(activeDirection.rawValue)
     }
 }

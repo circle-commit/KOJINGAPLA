@@ -3,4 +3,4 @@ def extract_text(image_bytes: bytes) -> str:
     if not image_bytes:
         return ""
 
-    return "Emergency exit on the left. Keep door closed."
+    return "비상구는 왼쪽에 있습니다. 문을 닫아 두세요."

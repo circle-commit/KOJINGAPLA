@@ -7,15 +7,18 @@ struct TextStabilityDecision {
 }
 
 final class TextStabilityTracker {
+    private var detectedStartDate: Date?
     private var stableStartDate: Date?
     private var smoothedRegion: CGRect?
     private let requiredStableDuration: TimeInterval = 0.75
+    private let persistentTextFallbackDuration: TimeInterval = 1.5
     private let minimumRegionArea: CGFloat = 0.035
     private let maximumCenterDistance: CGFloat = 0.28
     private let minimumBlurScore = 5.0
     private let maximumMovementScore = 13.0
 
     func reset() {
+        detectedStartDate = nil
         stableStartDate = nil
         smoothedRegion = nil
     }
@@ -24,6 +27,10 @@ final class TextStabilityTracker {
         guard let region = analysis.textRegion else {
             reset()
             return TextStabilityDecision(status: .searching, shouldRunFullOCR: false)
+        }
+
+        if detectedStartDate == nil {
+            detectedStartDate = analysis.timestamp
         }
 
         let isReadableCandidate = isLargeEnough(region)
@@ -35,6 +42,13 @@ final class TextStabilityTracker {
         guard isReadableCandidate else {
             stableStartDate = nil
             smoothedRegion = smooth(region, previous: smoothedRegion)
+
+            let detectedDuration = analysis.timestamp.timeIntervalSince(detectedStartDate ?? analysis.timestamp)
+            if detectedDuration >= persistentTextFallbackDuration {
+                detectedStartDate = nil
+                return TextStabilityDecision(status: .reading, shouldRunFullOCR: true)
+            }
+
             return TextStabilityDecision(status: .detected, shouldRunFullOCR: false)
         }
 
@@ -49,6 +63,7 @@ final class TextStabilityTracker {
 
         let stableDuration = analysis.timestamp.timeIntervalSince(stableStartDate ?? analysis.timestamp)
         if stableDuration >= requiredStableDuration {
+            detectedStartDate = nil
             stableStartDate = nil
             return TextStabilityDecision(status: .reading, shouldRunFullOCR: true)
         }

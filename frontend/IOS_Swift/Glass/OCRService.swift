@@ -14,7 +14,7 @@ final class OCRService {
                     status: "error",
                     mode: mode.rawValue,
                     detectedText: nil,
-                    voiceGuide: "Set the backend server IP address in CameraManager to start analysis.",
+                    voiceGuide: "분석을 시작하려면 앱 설정에 백엔드 서버 주소를 입력해 주세요.",
                     warnings: nil,
                     detections: nil
                 )
@@ -34,7 +34,7 @@ final class OCRService {
                     status: "error",
                     mode: mode.rawValue,
                     detectedText: nil,
-                    voiceGuide: "The camera image could not be prepared for upload.",
+                    voiceGuide: "카메라 이미지를 업로드할 수 있도록 준비하지 못했습니다.",
                     warnings: nil,
                     detections: nil
                 )
@@ -62,7 +62,7 @@ final class OCRService {
                         status: "error",
                         mode: mode.rawValue,
                         detectedText: nil,
-                        voiceGuide: "Server connection failed: \(error.localizedDescription)",
+                        voiceGuide: "서버 연결에 실패했습니다: \(error.localizedDescription)",
                         warnings: nil,
                         detections: nil
                     )
@@ -77,7 +77,7 @@ final class OCRService {
                         status: "error",
                         mode: mode.rawValue,
                         detectedText: nil,
-                        voiceGuide: "The server returned an unreadable response.",
+                        voiceGuide: "서버 응답을 읽을 수 없습니다.",
                         warnings: nil,
                         detections: nil
                     )

@@ -1,5 +1,10 @@
 # KOJINGAPLA
 
+## Frontend
+
+- iOS: `frontend/IOS_Swift`
+- Android: `frontend/Android`
+
 ## Backend
 
 ```bash

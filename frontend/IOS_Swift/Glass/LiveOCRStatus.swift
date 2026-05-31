@@ -1,12 +1,12 @@
 import SwiftUI
 
 enum LiveOCRStatus: String {
-    case searching = "Searching for text..."
-    case detected = "Text detected"
-    case stabilizing = "Stabilizing..."
-    case reading = "Reading text..."
-    case coolingDown = "Listening for new text..."
-    case unavailable = "Camera unavailable"
+    case searching = "문자를 찾는 중..."
+    case detected = "문자를 감지했습니다"
+    case stabilizing = "화면을 안정화하는 중..."
+    case reading = "문자를 읽는 중..."
+    case coolingDown = "새 문자를 기다리는 중..."
+    case unavailable = "카메라를 사용할 수 없습니다"
 
     var accessibilityLabel: String {
         rawValue
