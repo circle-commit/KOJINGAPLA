@@ -9,18 +9,19 @@ import SwiftUI
 import UIKit
 
 private enum AppPalette {
-    static let overlayTop = Color.black.opacity(0.72)
-    static let overlayMiddle = Color.black.opacity(0.2)
-    static let overlayBottom = Color.black.opacity(0.88)
-    static let surface = Color.black.opacity(0.86)
-    static let surfaceStrong = Color.black.opacity(0.94)
-    static let surfaceBorder = Color.white.opacity(0.22)
-    static let primary = Color(red: 1.0, green: 0.84, blue: 0.12)
+    static let overlayTop = Color(red: 0.04, green: 0.07, blue: 0.13).opacity(0.78)
+    static let overlayMiddle = Color(red: 0.05, green: 0.1, blue: 0.18).opacity(0.24)
+    static let overlayBottom = Color(red: 0.03, green: 0.05, blue: 0.1).opacity(0.92)
+    static let glassTint = Color(red: 0.09, green: 0.13, blue: 0.23).opacity(0.62)
+    static let glassTintStrong = Color(red: 0.08, green: 0.12, blue: 0.2).opacity(0.74)
+    static let surfaceBorder = Color.white.opacity(0.18)
+    static let primary = Color(red: 0.24, green: 0.68, blue: 1.0)
     static let primaryText = Color.black
     static let live = Color(red: 0.16, green: 0.82, blue: 0.56)
     static let warning = Color(red: 1.0, green: 0.58, blue: 0.12)
     static let danger = Color(red: 1.0, green: 0.18, blue: 0.18)
-    static let passiveButton = Color(red: 0.18, green: 0.18, blue: 0.2)
+    static let passiveButton = Color.white.opacity(0.1)
+    static let blueGlow = Color(red: 0.07, green: 0.42, blue: 1.0)
 }
 
 private enum CameraMode: String, CaseIterable {
@@ -104,6 +105,15 @@ struct ContentView: View {
                 endPoint: .bottom
             )
             .ignoresSafeArea()
+
+            RadialGradient(
+                colors: [AppPalette.blueGlow.opacity(0.38), .clear],
+                center: .bottomTrailing,
+                startRadius: 20,
+                endRadius: 420
+            )
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
 
             VStack(spacing: 18) {
                 ModeHeader(mode: selectedMode, isProcessing: cameraManager.isProcessing)
@@ -222,6 +232,7 @@ private struct ModeHeader: View {
             }
         }
         .frame(minHeight: 62)
+        .padding(.horizontal, 2)
         .accessibilityElement(children: .combine)
     }
 
@@ -269,13 +280,17 @@ private struct VoiceGuidanceCard: View {
         }
         .padding(22)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(AppPalette.surfaceStrong)
-        )
+        .glassCard(cornerRadius: 26, tint: AppPalette.glassTintStrong)
         .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(severity.tint.opacity(isProcessing ? 1.0 : 0.8), lineWidth: 3)
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .stroke(
+                    LinearGradient(
+                        colors: [Color.white.opacity(0.42), severity.tint.opacity(isProcessing ? 0.9 : 0.58), Color.white.opacity(0.08)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 2
+                )
         )
         .accessibilityElement(children: .combine)
         .accessibilityLabel("음성 안내")
@@ -330,13 +345,21 @@ private struct LiveOCRPanel: View {
             }
         }
         .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(AppPalette.surfaceStrong)
-        )
+        .glassCard(cornerRadius: 24, tint: AppPalette.glassTintStrong)
         .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(AppPalette.primary.opacity(isProcessing || hasResult ? 0.95 : 0.62), lineWidth: 2)
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.38),
+                            AppPalette.primary.opacity(isProcessing || hasResult ? 0.82 : 0.5),
+                            Color.white.opacity(0.08)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 2
+                )
         )
         .accessibilityElement(children: .combine)
         .accessibilityLabel(status.accessibilityLabel)
@@ -371,12 +394,9 @@ private struct BottomModeSelector: View {
             }
         }
         .padding(8)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(AppPalette.surface)
-        )
+        .glassCard(cornerRadius: 26, tint: AppPalette.glassTint)
         .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
                 .stroke(AppPalette.surfaceBorder, lineWidth: 2)
         )
         .accessibilityElement(children: .contain)
@@ -401,6 +421,7 @@ private struct BottomModeSelector: View {
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(isActive ? AppPalette.primary : AppPalette.passiveButton)
+                    .shadow(color: isActive ? AppPalette.primary.opacity(0.34) : .clear, radius: 14, x: 0, y: 7)
             )
         }
         .accessibilityLabel(mode.title)
@@ -447,6 +468,7 @@ private struct DirectionSegment: View {
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(isActive ? severity.tint : AppPalette.passiveButton)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -463,5 +485,27 @@ private struct DirectionSegment: View {
         case .right:
             return "arrow.right"
         }
+    }
+}
+
+private struct GlassCardModifier: ViewModifier {
+    let cornerRadius: CGFloat
+    let tint: Color
+
+    func body(content: Content) -> some View {
+        content
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .background(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(tint)
+            )
+            .shadow(color: Color.black.opacity(0.42), radius: 28, x: 0, y: 18)
+            .shadow(color: AppPalette.blueGlow.opacity(0.16), radius: 22, x: 0, y: 8)
+    }
+}
+
+private extension View {
+    func glassCard(cornerRadius: CGFloat, tint: Color) -> some View {
+        modifier(GlassCardModifier(cornerRadius: cornerRadius, tint: tint))
     }
 }

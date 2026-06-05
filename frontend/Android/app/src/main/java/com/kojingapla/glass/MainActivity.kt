@@ -119,7 +119,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
         val overlay = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(34), dp(20), dp(22))
+            setPadding(dp(20), dp(36), dp(20), dp(22))
         }
         root.addView(overlay, FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
 
@@ -143,7 +143,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         View(this).apply {
             background = GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(0xB8000000.toInt(), 0x33000000, 0xE0000000.toInt())
+                intArrayOf(0xD10B1220.toInt(), 0x4A102747, 0xF0060A12.toInt())
             )
         }
 
@@ -159,8 +159,9 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             gravity = Gravity.CENTER
             textSize = 13f
             typeface = Typeface.DEFAULT_BOLD
-            setTextColor(PALETTE_LIVE)
-            background = rounded(0xEF000000.toInt(), dp(24))
+            setTextColor(PALETTE_PRIMARY)
+            background = bordered(PALETTE_GLASS_STRONG, 0x33FFFFFF, dp(24), dp(1))
+            elevation = dp(10).toFloat()
         }
         row.addView(icon, LinearLayout.LayoutParams(dp(48), dp(48)))
 
@@ -193,8 +194,9 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private fun makeGuidanceCard(): LinearLayout =
         LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(22), dp(18), dp(22), dp(18))
-            background = bordered(0xEF000000.toInt(), PALETTE_PRIMARY, dp(20), dp(3))
+            setPadding(dp(22), dp(20), dp(22), dp(20))
+            background = glassPanel(PALETTE_GLASS_STRONG, PALETTE_PRIMARY, dp(26), dp(2))
+            elevation = dp(18).toFloat()
 
             guidanceLabel = TextView(context).apply {
                 text = "안내"
@@ -219,7 +221,8 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(18), dp(20), dp(18))
-            background = bordered(0xEF000000.toInt(), PALETTE_PRIMARY, dp(18), dp(2))
+            background = glassPanel(PALETTE_GLASS_STRONG, PALETTE_PRIMARY, dp(24), dp(2))
+            elevation = dp(18).toFloat()
 
             ocrStatusText = TextView(context).apply {
                 textSize = 20f
@@ -265,7 +268,8 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(dp(8), dp(8), dp(8), dp(8))
-            background = bordered(0xDB000000.toInt(), 0x38FFFFFF, dp(22), dp(2))
+            background = glassPanel(PALETTE_GLASS, 0x2EFFFFFF, dp(26), dp(1))
+            elevation = dp(16).toFloat()
         }
 
         liveButton = modeButton("실시간") { setMode(ProcessingMode.LIVE) }
@@ -281,6 +285,9 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             textSize = 16f
             typeface = Typeface.DEFAULT_BOLD
             isAllCaps = false
+            minHeight = 0
+            minWidth = 0
+            includeFontPadding = false
             setOnClickListener { onClick() }
         }
 
@@ -394,11 +401,13 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
         val severityColor = severityColor()
         guidanceLabel.setTextColor(severityColor)
-        guidanceCard.background = bordered(0xEF000000.toInt(), severityColor, dp(20), dp(3))
+        guidanceCard.background = glassPanel(PALETTE_GLASS_STRONG, severityColor, dp(26), dp(2))
 
-        liveButton.background = rounded(if (!textMode) PALETTE_PRIMARY else PALETTE_PASSIVE, dp(16))
+        liveButton.background = activeButton(if (!textMode) PALETTE_PRIMARY else PALETTE_PASSIVE, !textMode)
+        liveButton.elevation = if (!textMode) dp(8).toFloat() else 0f
         liveButton.setTextColor(if (!textMode) Color.BLACK else Color.WHITE)
-        textButton.background = rounded(if (textMode) PALETTE_PRIMARY else PALETTE_PASSIVE, dp(16))
+        textButton.background = activeButton(if (textMode) PALETTE_PRIMARY else PALETTE_PASSIVE, textMode)
+        textButton.elevation = if (textMode) dp(8).toFloat() else 0f
         textButton.setTextColor(if (textMode) Color.BLACK else Color.WHITE)
 
         directionButtons.forEachIndexed { index, view ->
@@ -408,7 +417,8 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                 else -> "center"
             }
             val active = latestLiveDirection == direction
-            view.background = bordered(if (active) severityColor else PALETTE_PASSIVE, 0x66FFFFFF, dp(14), dp(2))
+            view.background = glassPanel(if (active) severityColor else PALETTE_PASSIVE, if (active) 0xA6FFFFFF.toInt() else 0x30FFFFFF, dp(16), dp(1))
+            view.elevation = if (active) dp(8).toFloat() else dp(3).toFloat()
             view.setTextColor(if (active) Color.BLACK else 0xC7FFFFFF.toInt())
             view.visibility = if (textMode) View.GONE else View.VISIBLE
         }
@@ -461,6 +471,21 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
     private fun bordered(color: Int, strokeColor: Int, radius: Int, strokeWidth: Int): GradientDrawable =
         rounded(color, radius).apply { setStroke(strokeWidth, strokeColor) }
+
+    private fun glassPanel(color: Int, strokeColor: Int, radius: Int, strokeWidth: Int): GradientDrawable =
+        GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(0x26FFFFFF, color, PALETTE_GLASS_DEEP)).apply {
+            cornerRadius = radius.toFloat()
+            setStroke(strokeWidth, strokeColor)
+        }
+
+    private fun activeButton(color: Int, active: Boolean): GradientDrawable =
+        GradientDrawable(
+            GradientDrawable.Orientation.TL_BR,
+            if (active) intArrayOf(0xFF47C7FF.toInt(), color, 0xFF4064FF.toInt()) else intArrayOf(0x1AFFFFFF, color)
+        ).apply {
+            cornerRadius = dp(16).toFloat()
+            setStroke(dp(1), if (active) 0x8AFFFFFF.toInt() else 0x24FFFFFF)
+        }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
@@ -603,10 +628,13 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         private const val TTS_SPEECH_RATE = 0.92f
         private const val TTS_PITCH = 1.04f
 
-        private const val PALETTE_PRIMARY = 0xFFFFD61F.toInt()
+        private const val PALETTE_PRIMARY = 0xFF46BFFF.toInt()
         private const val PALETTE_LIVE = 0xFF29D18F.toInt()
         private const val PALETTE_WARNING = 0xFFFF941F.toInt()
         private const val PALETTE_DANGER = 0xFFFF2E2E.toInt()
-        private const val PALETTE_PASSIVE = 0xFF2E2E33.toInt()
+        private const val PALETTE_PASSIVE = 0x2EFFFFFF
+        private const val PALETTE_GLASS = 0xA61A263B.toInt()
+        private const val PALETTE_GLASS_STRONG = 0xC61A2537.toInt()
+        private const val PALETTE_GLASS_DEEP = 0xE60A1020.toInt()
     }
 }
