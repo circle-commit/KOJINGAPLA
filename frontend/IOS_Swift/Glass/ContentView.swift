@@ -1,512 +1,403 @@
 //
 //  ContentView.swift
-//  Glass
-//
-//  Created by JoMinHui on 4/10/26.
+//  Glass — redesigned UI
 //
 
 import SwiftUI
-import UIKit
 
-private enum AppPalette {
-    static let overlayTop = Color(red: 0.04, green: 0.07, blue: 0.13).opacity(0.78)
-    static let overlayMiddle = Color(red: 0.05, green: 0.1, blue: 0.18).opacity(0.24)
-    static let overlayBottom = Color(red: 0.03, green: 0.05, blue: 0.1).opacity(0.92)
-    static let glassTint = Color(red: 0.09, green: 0.13, blue: 0.23).opacity(0.62)
-    static let glassTintStrong = Color(red: 0.08, green: 0.12, blue: 0.2).opacity(0.74)
-    static let surfaceBorder = Color.white.opacity(0.18)
-    static let primary = Color(red: 0.24, green: 0.68, blue: 1.0)
-    static let primaryText = Color.black
-    static let live = Color(red: 0.16, green: 0.82, blue: 0.56)
-    static let warning = Color(red: 1.0, green: 0.58, blue: 0.12)
-    static let danger = Color(red: 1.0, green: 0.18, blue: 0.18)
-    static let passiveButton = Color.white.opacity(0.1)
-    static let blueGlow = Color(red: 0.07, green: 0.42, blue: 1.0)
+// MARK: - Palette
+private enum P {
+    static let bg          = Color(red:0.027, green:0.031, blue:0.055)
+    static let primary     = Color(red:0.27,  green:0.72,  blue:1.0)
+    static let live        = Color(red:0.16,  green:0.87,  blue:0.56)
+    static let warning     = Color(red:1.0,   green:0.58,  blue:0.12)
+    static let danger      = Color(red:1.0,   green:0.23,  blue:0.23)
+    static let glass       = Color(red:0.09,  green:0.13,  blue:0.22).opacity(0.72)
+    static let glassStroke = Color.white.opacity(0.10)
+    static let dimText     = Color.white.opacity(0.45)
+    static let pill        = Color.white.opacity(0.07)
 }
 
-private enum CameraMode: String, CaseIterable {
-    case liveAnalyzing = "실시간"
-    case textDescription = "문자 읽기"
-
+// MARK: - Enums (unchanged — keep existing logic intact)
+private enum AppMode: String, CaseIterable {
+    case live = "실시간"
+    case ocr  = "문자 읽기"
     var icon: String {
-        switch self {
-        case .liveAnalyzing:
-            return "eye.fill"
-        case .textDescription:
-            return "text.viewfinder"
-        }
+        self == .live ? "eye.fill" : "text.viewfinder"
     }
-
-    var title: String {
-        switch self {
-        case .liveAnalyzing:
-            return "보행 안내"
-        case .textDescription:
-            return "문자 읽기"
-        }
-    }
-
     var processingMode: CameraManager.ProcessingMode {
+        self == .live ? .liveAnalyzing : .textDescription
+    }
+}
+
+private enum Severity {
+    case calm, warning, danger
+    var color: Color {
         switch self {
-        case .liveAnalyzing:
-            return .liveAnalyzing
-        case .textDescription:
-            return .textDescription
+        case .calm:    return P.primary
+        case .warning: return P.warning
+        case .danger:  return P.danger
+        }
+    }
+    var label: String {
+        switch self {
+        case .calm:    return "안내"
+        case .warning: return "주의"
+        case .danger:  return "위험"
         }
     }
 }
 
-private enum GuidanceSeverity {
-    case calm
-    case warning
-    case danger
-
-    var tint: Color {
-        switch self {
-        case .calm:
-            return AppPalette.primary
-        case .warning:
-            return AppPalette.warning
-        case .danger:
-            return AppPalette.danger
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .calm:
-            return "speaker.wave.2.fill"
-        case .warning:
-            return "exclamationmark.triangle.fill"
-        case .danger:
-            return "exclamationmark.octagon.fill"
-        }
-    }
-}
-
-private enum GuidanceDirection: String, CaseIterable {
-    case left = "왼쪽"
+private enum Dir: String, CaseIterable {
+    case left   = "왼쪽"
     case center = "정면"
-    case right = "오른쪽"
+    case right  = "오른쪽"
+    var arrow: String {
+        switch self {
+        case .left:   return "arrow.left"
+        case .center: return "arrow.up"
+        case .right:  return "arrow.right"
+        }
+    }
 }
 
+// MARK: - Root View
 struct ContentView: View {
-    @StateObject private var cameraManager = CameraManager()
-    @State private var selectedMode: CameraMode = .liveAnalyzing
+    @StateObject private var cam = CameraManager()
+    @State private var mode: AppMode = .live
 
     var body: some View {
         ZStack {
-            CameraPreview(session: cameraManager.session)
-                .edgesIgnoringSafeArea(.all)
+            // Camera
+            CameraPreview(session: cam.session)
+                .ignoresSafeArea()
 
-            LinearGradient(
-                colors: [AppPalette.overlayTop, AppPalette.overlayMiddle, AppPalette.overlayBottom],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
+            // Vignette + fog
+            VignetteLayer()
 
-            RadialGradient(
-                colors: [AppPalette.blueGlow.opacity(0.38), .clear],
-                center: .bottomTrailing,
-                startRadius: 20,
-                endRadius: 420
-            )
-            .ignoresSafeArea()
-            .allowsHitTesting(false)
+            // UI
+            VStack(spacing: 0) {
+                StatusBar()
+                    .padding(.horizontal, 22)
+                    .padding(.top, 14)
 
-            VStack(spacing: 18) {
-                ModeHeader(mode: selectedMode, isProcessing: cameraManager.isProcessing)
-                    .padding(.top, 18)
+                ModePill(mode: mode, processing: cam.isProcessing)
+                    .padding(.horizontal, 22)
+                    .padding(.top, 14)
 
-                Spacer(minLength: 20)
+                Spacer()
 
-                if selectedMode == .liveAnalyzing {
-                    VoiceGuidanceCard(
-                        message: displayGuidance,
-                        severity: liveGuidanceSeverity,
-                        isProcessing: cameraManager.isProcessing
-                    )
-
-                    DirectionGuidanceStrip(
-                        activeDirection: liveGuidanceDirection,
-                        severity: liveGuidanceSeverity
-                    )
+                Group {
+                    if mode == .live {
+                        LivePanel(
+                            message:   liveMessage,
+                            severity:  severity,
+                            direction: activeDir
+                        )
+                        .padding(.horizontal, 16)
+                    } else {
+                        OcrPanel(
+                            status:      cam.liveOCRStatus.rawValue,
+                            result:      cam.latestDetectedText,
+                            processing:  cam.isProcessing
+                        )
+                        .padding(.horizontal, 16)
+                    }
                 }
 
-                if selectedMode == .textDescription {
-                    LiveOCRPanel(
-                        status: cameraManager.liveOCRStatus,
-                        text: textCaptureDisplayText,
-                        isProcessing: cameraManager.isProcessing,
-                        hasResult: hasOCRResult
-                    )
+                ModeBar(selected: $mode) { m in
+                    cam.setMode(m.processingMode)
                 }
-
-                BottomModeSelector(selectedMode: $selectedMode) { mode in
-                    cameraManager.setMode(mode.processingMode)
-                }
-                .padding(.bottom, 22)
+                .padding(.horizontal, 16)
+                .padding(.top, 10)
+                .padding(.bottom, 28)
             }
-            .padding(.horizontal, 20)
         }
-        .onAppear {
-            cameraManager.setMode(selectedMode.processingMode)
-        }
+        .onAppear { cam.setMode(mode.processingMode) }
     }
 
-    private var displayGuidance: String {
-        if selectedMode == .textDescription && !cameraManager.isProcessing && cameraManager.latestDetectedText == nil {
-            return cameraManager.liveOCRStatus.rawValue
-        }
+    // MARK: computed
+    private var liveMessage: String { cam.latestGuide }
 
-        return cameraManager.latestGuide
-    }
-
-    private var hasOCRResult: Bool {
-        guard let detectedText = cameraManager.latestDetectedText else { return false }
-        return !detectedText.isEmpty
-    }
-
-    private var textCaptureDisplayText: String {
-        if let detectedText = cameraManager.latestDetectedText,
-           !detectedText.isEmpty {
-            return detectedText
-        }
-
-        return cameraManager.liveOCRStatus.rawValue
-    }
-
-    private var liveGuidanceDirection: GuidanceDirection {
-        switch cameraManager.latestLiveDirection {
-        case "left":
-            return .left
-        case "right":
-            return .right
-        default:
-            return .center
-        }
-    }
-
-    private var liveGuidanceSeverity: GuidanceSeverity {
-        if cameraManager.latestLiveRiskScore >= 85 {
-            return .danger
-        }
-
-        if cameraManager.latestLiveRiskScore >= 55 {
-            return .warning
-        }
-
+    private var severity: Severity {
+        if cam.latestLiveRiskScore >= 85 { return .danger }
+        if cam.latestLiveRiskScore >= 55 { return .warning }
         return .calm
+    }
+
+    private var activeDir: Dir {
+        switch cam.latestLiveDirection {
+        case "left":  return .left
+        case "right": return .right
+        default:      return .center
+        }
     }
 }
 
-private struct ModeHeader: View {
-    let mode: CameraMode
-    let isProcessing: Bool
+// MARK: - Vignette
+private struct VignetteLayer: View {
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red:0.02, green:0.03, blue:0.08).opacity(0.88),
+                    .clear,
+                    Color(red:0.02, green:0.03, blue:0.08).opacity(0.96)
+                ],
+                startPoint: .top, endPoint: .bottom
+            )
+            .ignoresSafeArea()
+        }
+    }
+}
+
+// MARK: - Status Bar
+private struct StatusBar: View {
+    var body: some View {
+        HStack {
+            Text(currentTime)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.8))
+            Spacer()
+            HStack(spacing: 4) {
+                ForEach(0..<3, id: \.self) { i in
+                    Circle()
+                        .fill(.white.opacity(i == 2 ? 0.25 : 0.55))
+                        .frame(width: 5, height: 5)
+                }
+            }
+        }
+    }
+    private var currentTime: String {
+        let f = DateFormatter(); f.dateFormat = "H:mm"; return f.string(from: Date())
+    }
+}
+
+// MARK: - Mode Pill (header)
+private struct ModePill: View {
+    let mode: AppMode
+    let processing: Bool
 
     var body: some View {
-        HStack(spacing: 14) {
-            Image(systemName: mode.icon)
-                .font(.system(size: 24, weight: .bold))
-                .foregroundStyle(mode == .liveAnalyzing ? AppPalette.live : AppPalette.primary)
-                .frame(width: 48, height: 48)
-                .background(.ultraThinMaterial, in: Circle())
-                .background(Circle().fill(AppPalette.glassTintStrong))
+        HStack(spacing: 0) {
+            // status dot
+            Circle()
+                .fill(mode == .live ? P.live : P.primary)
+                .frame(width: 7, height: 7)
+                .padding(.leading, 12)
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(mode.title)
-                    .font(.title2.weight(.bold))
-                    .foregroundStyle(.white)
-                Text(statusText)
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.72))
+            Text(mode == .live ? "보행 안내" : "문자 읽기")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(.white)
+                .padding(.leading, 7)
+
+            if processing {
+                ProgressView()
+                    .tint(P.primary)
+                    .scaleEffect(0.65)
+                    .padding(.leading, 8)
             }
 
             Spacer()
-
-            if isProcessing {
-                ProgressView()
-                    .tint(AppPalette.primary)
-                    .scaleEffect(1.25)
-                    .accessibilityLabel("처리 중")
-            }
         }
-        .frame(minHeight: 62)
-        .padding(.horizontal, 2)
-        .accessibilityElement(children: .combine)
+        .frame(height: 36)
+        .background(P.pill, in: Capsule())
+        .overlay(Capsule().stroke(P.glassStroke, lineWidth: 1))
     }
+}
 
-    private var statusText: String {
-        if isProcessing {
-            return "처리 중"
-        }
+// MARK: - Live Panel
+private struct LivePanel: View {
+    let message: String
+    let severity: Severity
+    let direction: Dir
 
-        switch mode {
-        case .liveAnalyzing:
-            return "주변 확인 중"
-        case .textDescription:
-            return "준비됨"
+    var body: some View {
+        VStack(spacing: 8) {
+            GuidanceCard(message: message, severity: severity)
+            DirStrip(active: direction, severity: severity)
         }
     }
 }
 
-private struct VoiceGuidanceCard: View {
+// MARK: - Guidance Card
+private struct GuidanceCard: View {
     let message: String
-    let severity: GuidanceSeverity
-    let isProcessing: Bool
+    let severity: Severity
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 10) {
-                Image(systemName: severity.icon)
-                    .font(.system(size: 24, weight: .bold))
-                    .foregroundStyle(severity.tint)
-                    .frame(width: 34)
-
-                Text("안내")
-                    .font(.headline.weight(.bold))
-                    .foregroundStyle(severity.tint)
-
-                Spacer()
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Rectangle()
+                    .fill(severity.color)
+                    .frame(width: 3, height: 14)
+                    .clipShape(.rect(cornerRadius: 2))
+                Text(severity.label)
+                    .font(.system(size: 10, weight: .bold))
+                    .tracking(1.2)
+                    .foregroundStyle(severity.color)
             }
 
             Text(message)
-                .font(.system(size: 34, weight: .bold))
-                .minimumScaleFactor(0.72)
-                .lineLimit(3)
-                .lineSpacing(4)
+                .font(.system(size: 22, weight: .bold))
                 .foregroundStyle(.white)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .lineSpacing(3)
+                .minimumScaleFactor(0.75)
+                .lineLimit(3)
         }
-        .padding(22)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassCard(cornerRadius: 26, tint: AppPalette.glassTintStrong)
+        .padding(18)
+        .background(P.glass, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .stroke(
-                    LinearGradient(
-                        colors: [Color.white.opacity(0.42), severity.tint.opacity(isProcessing ? 0.9 : 0.58), Color.white.opacity(0.08)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 2
-                )
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(severity.color.opacity(0.28), lineWidth: 1)
         )
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("음성 안내")
-        .accessibilityValue(message)
     }
 }
 
-private struct LiveOCRPanel: View {
-    let status: LiveOCRStatus
-    let text: String
-    let isProcessing: Bool
-    let hasResult: Bool
+// MARK: - Direction Strip
+private struct DirStrip: View {
+    let active: Dir
+    let severity: Severity
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 12) {
-                Image(systemName: statusIcon)
-                    .font(.system(size: 24, weight: .bold))
-                    .foregroundStyle(AppPalette.primary)
-                    .frame(width: 36, height: 36)
+        HStack(spacing: 7) {
+            ForEach(Dir.allCases, id: \.self) { d in
+                DirCell(dir: d, isActive: d == active, color: severity.color)
+            }
+        }
+        .frame(height: 54)
+    }
+}
 
-                Text(status.rawValue)
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(.white)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                
+private struct DirCell: View {
+    let dir: Dir
+    let isActive: Bool
+    let color: Color
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Image(systemName: dir.arrow)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(isActive ? color : .white.opacity(0.35))
+            Text(dir.rawValue)
+                .font(.system(size: 9, weight: .bold))
+                .tracking(0.5)
+                .foregroundStyle(isActive ? color.opacity(0.9) : .white.opacity(0.3))
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 54)
+        .background(
+            isActive
+                ? color.opacity(0.14)
+                : P.pill
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(isActive ? color.opacity(0.45) : P.glassStroke, lineWidth: 1)
+        )
+        .clipShape(.rect(cornerRadius: 14, style: .continuous))
+    }
+}
+
+// MARK: - OCR Panel
+private struct OcrPanel: View {
+    let status: String
+    let result: String?
+    let processing: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 10) {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(P.primary.opacity(0.14))
+                    .frame(width: 30, height: 30)
+                    .overlay(
+                        Image(systemName: "text.viewfinder")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(P.primary)
+                    )
+
+                Text(status)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(P.dimText)
+
                 Spacer()
 
-                if isProcessing {
+                if processing {
                     ProgressView()
-                        .tint(AppPalette.primary)
-                        .scaleEffect(1.2)
-                        .accessibilityLabel("문자 읽는 중")
+                        .tint(P.primary)
+                        .scaleEffect(0.75)
                 }
             }
 
-            if hasResult {
-                ScrollView {
-                    Text(text)
-                        .font(.system(size: 28, weight: .semibold))
-                        .lineSpacing(8)
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, 4)
-                }
-                .frame(maxWidth: .infinity)
-                .frame(minHeight: 96, maxHeight: 220)
-                .accessibilityLabel("인식된 문자")
-                .accessibilityValue(text)
+            if let text = result, !text.isEmpty {
+                Divider()
+                    .background(.white.opacity(0.08))
+                    .padding(.vertical, 14)
+
+                Text(text)
+                    .font(.system(size: 26, weight: .bold))
+                    .foregroundStyle(.white)
+                    .lineSpacing(4)
             }
         }
-        .padding(20)
-        .glassCard(cornerRadius: 24, tint: AppPalette.glassTintStrong)
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(P.glass, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.38),
-                            AppPalette.primary.opacity(isProcessing || hasResult ? 0.82 : 0.5),
-                            Color.white.opacity(0.08)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 2
-                )
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(P.primary.opacity(0.25), lineWidth: 1)
         )
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(status.accessibilityLabel)
-    }
-
-    private var statusIcon: String {
-        switch status {
-        case .searching:
-            return "viewfinder"
-        case .detected:
-            return "text.viewfinder"
-        case .stabilizing:
-            return "scope"
-        case .reading:
-            return "speaker.wave.2.fill"
-        case .coolingDown:
-            return "ear"
-        case .unavailable:
-            return "camera.fill"
-        }
     }
 }
 
-private struct BottomModeSelector: View {
-    @Binding var selectedMode: CameraMode
-    let onModeChanged: (CameraMode) -> Void
+// MARK: - Mode Bar (bottom)
+private struct ModeBar: View {
+    @Binding var selected: AppMode
+    let onChange: (AppMode) -> Void
 
     var body: some View {
-        HStack(spacing: 10) {
-            ForEach(CameraMode.allCases, id: \.self) { mode in
-                modeButton(for: mode)
+        HStack(spacing: 7) {
+            ForEach(AppMode.allCases, id: \.self) { m in
+                ModeBtn(mode: m, active: selected == m) {
+                    selected = m
+                    onChange(m)
+                }
             }
         }
-        .padding(8)
-        .glassCard(cornerRadius: 26, tint: AppPalette.glassTint)
+        .padding(6)
+        .background(P.glass, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .stroke(AppPalette.surfaceBorder, lineWidth: 2)
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(P.glassStroke, lineWidth: 1)
         )
-        .accessibilityElement(children: .contain)
     }
+}
 
-    private func modeButton(for mode: CameraMode) -> some View {
-        let isActive = selectedMode == mode
+private struct ModeBtn: View {
+    let mode: AppMode
+    let active: Bool
+    let action: () -> Void
 
-        return Button {
-            selectedMode = mode
-            onModeChanged(mode)
-        } label: {
-            HStack(spacing: 8) {
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 7) {
                 Image(systemName: mode.icon)
-                    .font(.system(size: 20, weight: .bold))
+                    .font(.system(size: 16, weight: .bold))
                 Text(mode.rawValue)
-                    .font(.headline.weight(.bold))
+                    .font(.system(size: 14, weight: .bold))
             }
-            .foregroundStyle(isActive ? AppPalette.primaryText : .white)
+            .foregroundStyle(active ? Color(red:0.02, green:0.06, blue:0.14) : .white.opacity(0.6))
             .frame(maxWidth: .infinity)
-            .frame(height: 58)
+            .frame(height: 48)
             .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(isActive ? AppPalette.primary : AppPalette.passiveButton)
-                    .shadow(color: isActive ? AppPalette.primary.opacity(0.34) : .clear, radius: 14, x: 0, y: 7)
+                active
+                    ? P.primary
+                    : Color.clear,
+                in: RoundedRectangle(cornerRadius: 16, style: .continuous)
             )
         }
-        .accessibilityLabel(mode.title)
-        .accessibilityAddTraits(isActive ? .isSelected : [])
-    }
-}
-
-private struct DirectionGuidanceStrip: View {
-    let activeDirection: GuidanceDirection
-    let severity: GuidanceSeverity
-
-    var body: some View {
-        HStack(spacing: 8) {
-            ForEach(GuidanceDirection.allCases, id: \.self) { direction in
-                DirectionSegment(
-                    direction: direction,
-                    isActive: direction == activeDirection,
-                    severity: severity
-                )
-            }
-        }
-        .frame(height: 64)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("위험 방향")
-        .accessibilityValue(activeDirection.rawValue)
-    }
-}
-
-private struct DirectionSegment: View {
-    let direction: GuidanceDirection
-    let isActive: Bool
-    let severity: GuidanceSeverity
-
-    var body: some View {
-        VStack(spacing: 5) {
-            Image(systemName: iconName)
-                .font(.system(size: 20, weight: .bold))
-            Text(direction.rawValue)
-                .font(.caption.weight(.bold))
-        }
-        .foregroundStyle(isActive ? AppPalette.primaryText : .white.opacity(0.78))
-        .frame(maxWidth: .infinity)
-        .frame(height: 64)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(isActive ? severity.tint : AppPalette.passiveButton)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(isActive ? Color.white.opacity(0.65) : AppPalette.surfaceBorder, lineWidth: 2)
-        )
-    }
-
-    private var iconName: String {
-        switch direction {
-        case .left:
-            return "arrow.left"
-        case .center:
-            return "arrow.up"
-        case .right:
-            return "arrow.right"
-        }
-    }
-}
-
-private struct GlassCardModifier: ViewModifier {
-    let cornerRadius: CGFloat
-    let tint: Color
-
-    func body(content: Content) -> some View {
-        content
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-            .background(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(tint)
-            )
-            .shadow(color: Color.black.opacity(0.42), radius: 28, x: 0, y: 18)
-            .shadow(color: AppPalette.blueGlow.opacity(0.16), radius: 22, x: 0, y: 8)
-    }
-}
-
-private extension View {
-    func glassCard(cornerRadius: CGFloat, tint: Color) -> some View {
-        modifier(GlassCardModifier(cornerRadius: cornerRadius, tint: tint))
+        .buttonStyle(.plain)
     }
 }
