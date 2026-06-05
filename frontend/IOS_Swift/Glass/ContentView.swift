@@ -211,7 +211,8 @@ private struct ModeHeader: View {
                 .font(.system(size: 24, weight: .bold))
                 .foregroundStyle(mode == .liveAnalyzing ? AppPalette.live : AppPalette.primary)
                 .frame(width: 48, height: 48)
-                .background(Circle().fill(AppPalette.surfaceStrong))
+                .background(.ultraThinMaterial, in: Circle())
+                .background(Circle().fill(AppPalette.glassTintStrong))
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(mode.title)
