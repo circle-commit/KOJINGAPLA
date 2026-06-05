@@ -5,6 +5,9 @@ import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.LayerDrawable
+import android.graphics.drawable.ShapeDrawable
+import android.graphics.drawable.shapes.RoundRectShape
 import android.os.Bundle
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -14,18 +17,9 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
-import android.widget.FrameLayout
-import android.widget.LinearLayout
-import android.widget.ProgressBar
-import android.widget.ScrollView
-import android.widget.TextView
+import android.widget.*
 import androidx.activity.ComponentActivity
-import androidx.camera.core.CameraSelector
-import androidx.camera.core.ExperimentalGetImage
-import androidx.camera.core.ImageAnalysis
-import androidx.camera.core.ImageProxy
-import androidx.camera.core.Preview
+import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.app.ActivityCompat
@@ -40,78 +34,70 @@ import kotlin.concurrent.thread
 import kotlin.math.abs
 
 class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
+
+    // ── 비즈니스 로직 (변경 없음) ─────────────────────────────
     private val cameraExecutor = Executors.newSingleThreadExecutor()
-    private val ocrService = OcrService(SERVER_URL)
-    private val stabilityTracker = TextStabilityTracker()
+    private val ocrService     = OcrService(SERVER_URL)
+    private val stabilityTracker   = TextStabilityTracker()
     private val duplicateSuppressor = DuplicateTextSuppressor()
 
     private lateinit var previewView: PreviewView
-    private lateinit var titleText: TextView
-    private lateinit var statusText: TextView
-    private lateinit var guidanceCard: LinearLayout
-    private lateinit var guidanceLabel: TextView
-    private lateinit var guidanceText: TextView
-    private lateinit var ocrPanel: LinearLayout
-    private lateinit var ocrStatusText: TextView
-    private lateinit var ocrResultText: TextView
-    private lateinit var progress: ProgressBar
-    private lateinit var liveButton: Button
-    private lateinit var textButton: Button
-    private lateinit var directionButtons: List<TextView>
-
     private var textToSpeech: TextToSpeech? = null
     private var vibrator: Vibrator? = null
-    private var currentMode = ProcessingMode.LIVE
-    private var isProcessing = false
-    private var latestGuide = "실시간 안내 모드가 준비되었습니다."
+    private var currentMode        = ProcessingMode.LIVE
+    private var isProcessing       = false
+    private var latestGuide        = "실시간 안내 모드가 준비되었습니다."
     private var latestDetectedText: String? = null
-    private var liveOcrStatus = LiveOcrStatus.SEARCHING
+    private var liveOcrStatus      = LiveOcrStatus.SEARCHING
     private var latestLiveDirection = "center"
     private var latestLiveRiskScore = 0
-    private var lastLiveRequestMs = 0L
+    private var lastLiveRequestMs  = 0L
     private var lastFullOcrRequestMs = 0L
 
+    // ── UI refs ───────────────────────────────────────────────
+    private lateinit var statusDot:       View
+    private lateinit var statusLabel:     TextView
+    private lateinit var spinnerRef:      ProgressBar
+    private lateinit var guidanceTag:     TextView
+    private lateinit var guidanceMsg:     TextView
+    private lateinit var guidanceCard:    LinearLayout
+    private lateinit var ocrCard:         LinearLayout
+    private lateinit var ocrStatusLbl:    TextView
+    private lateinit var ocrDivider:      View
+    private lateinit var ocrResultLbl:    TextView
+    private lateinit var dirButtons:      List<LinearLayout>
+    private lateinit var btnLive:         LinearLayout
+    private lateinit var btnOcr:          LinearLayout
+
+    // ── Lifecycle ─────────────────────────────────────────────
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        vibrator = getSystemService(VIBRATOR_SERVICE) as Vibrator
+        vibrator    = getSystemService(VIBRATOR_SERVICE) as Vibrator
         textToSpeech = TextToSpeech(this, this)
         buildUi()
-
-        if (hasCameraPermission()) {
-            startCamera()
-        } else {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), CAMERA_PERMISSION_REQUEST)
-        }
+        if (hasCameraPermission()) startCamera()
+        else ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), 10)
     }
 
     override fun onInit(status: Int) {
-        if (status == TextToSpeech.SUCCESS) {
-            configureTtsVoice()
-        }
+        if (status == TextToSpeech.SUCCESS) configureTtsVoice()
     }
 
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == CAMERA_PERMISSION_REQUEST && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
-            startCamera()
-        } else {
-            liveOcrStatus = LiveOcrStatus.UNAVAILABLE
-            latestGuide = "이 앱을 사용하려면 카메라 권한이 필요합니다."
-            renderState()
-        }
+    override fun onRequestPermissionsResult(req: Int, perms: Array<out String>, results: IntArray) {
+        super.onRequestPermissionsResult(req, perms, results)
+        if (req == 10 && results.firstOrNull() == PackageManager.PERMISSION_GRANTED) startCamera()
+        else { liveOcrStatus = LiveOcrStatus.UNAVAILABLE; renderState() }
     }
 
     override fun onDestroy() {
         super.onDestroy()
         cameraExecutor.shutdown()
-        textToSpeech?.stop()
-        textToSpeech?.shutdown()
+        textToSpeech?.stop(); textToSpeech?.shutdown()
     }
 
+    // ── UI Build ──────────────────────────────────────────────
     private fun buildUi() {
-        previewView = PreviewView(this).apply {
-            scaleType = PreviewView.ScaleType.FILL_CENTER
-        }
+        previewView = PreviewView(this).apply { scaleType = PreviewView.ScaleType.FILL_CENTER }
 
         val root = FrameLayout(this)
         root.addView(previewView, FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
@@ -119,522 +105,514 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
         val overlay = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(36), dp(20), dp(22))
+            setPadding(dp(16), dp(52), dp(16), dp(28))
         }
         root.addView(overlay, FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
 
-        overlay.addView(makeHeader())
-        overlay.addView(View(this), LinearLayout.LayoutParams(1, 0, 1f))
-
-        guidanceCard = makeGuidanceCard()
-        overlay.addView(guidanceCard)
-
-        ocrPanel = makeOcrPanel()
-        overlay.addView(ocrPanel)
-
-        overlay.addView(makeDirectionStrip())
-        overlay.addView(makeModeSelector())
+        overlay.addView(makeModePill())
+        overlay.addView(spacer())
+        overlay.addView(buildGuidanceCard())
+        overlay.addView(buildOcrCard())
+        overlay.addView(buildDirStrip())
+        overlay.addView(buildModeBar())
 
         setContentView(root)
         renderState()
     }
 
-    private fun makeScrim(): View =
-        View(this).apply {
-            background = GradientDrawable(
-                GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(0xD10B1220.toInt(), 0x4A102747, 0xF0060A12.toInt())
-            )
-        }
+    // scrim: top dark → clear → bottom dark
+    private fun makeScrim(): View = View(this).apply {
+        background = GradientDrawable(
+            GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(0xE1050810.toInt(), 0x00000000, 0xF5040610.toInt())
+        )
+    }
 
-    private fun makeHeader(): View {
+    // ── Mode Pill (header) ────────────────────────────────────
+    private fun makeModePill(): View {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            minimumHeight = dp(62)
+            gravity     = Gravity.CENTER_VERTICAL
+            setPadding(dp(12), 0, dp(14), 0)
+            background  = pillBg()
         }
 
-        val icon = TextView(this).apply {
-            text = "안내"
-            gravity = Gravity.CENTER
-            textSize = 13f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(PALETTE_PRIMARY)
-            background = bordered(PALETTE_GLASS_STRONG, 0x33FFFFFF, dp(24), dp(1))
-            elevation = dp(10).toFloat()
+        statusDot = View(this).apply {
+            background = circle(C_LIVE)
         }
-        row.addView(icon, LinearLayout.LayoutParams(dp(48), dp(48)))
+        row.addView(statusDot, dp(8), dp(8))
 
-        val labels = LinearLayout(this).apply {
+        statusLabel = TextView(this).apply {
+            text      = "보행 안내"
+            textSize  = 13f
+            typeface  = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            setPadding(dp(8), 0, 0, 0)
+        }
+        row.addView(statusLabel, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+
+        spinnerRef = ProgressBar(this).apply {
+            isIndeterminate = true
+            visibility      = View.GONE
+            scaleX = 0.65f; scaleY = 0.65f
+        }
+        row.addView(spinnerRef, dp(24), dp(24))
+
+        val wrap = FrameLayout(this)
+        wrap.addView(row, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(38)))
+        val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(38))
+        lp.bottomMargin = dp(14)
+        wrap.layoutParams = lp
+        return wrap
+    }
+
+    // ── Guidance Card ─────────────────────────────────────────
+    private fun buildGuidanceCard(): LinearLayout {
+        guidanceCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(14), 0, 0, 0)
+            setPadding(dp(18), dp(16), dp(18), dp(18))
+            background  = glassCard(C_PRIMARY, dp(20))
+            elevation   = dp(12).toFloat()
         }
-        titleText = TextView(this).apply {
+
+        // tag row: accent bar + label
+        val tagRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity     = Gravity.CENTER_VERTICAL
+        }
+        val accentBar = View(this).apply {
+            background = rounded(C_PRIMARY, dp(2))
+        }
+        tagRow.addView(accentBar, dp(3), dp(14))
+        guidanceTag = TextView(this).apply {
+            text      = "안내"
+            textSize  = 10f
+            typeface  = Typeface.DEFAULT_BOLD
+            letterSpacing = 0.12f
+            setTextColor(C_PRIMARY)
+            setPadding(dp(7), 0, 0, 0)
+        }
+        tagRow.addView(guidanceTag)
+        guidanceCard.addView(tagRow)
+
+        guidanceMsg = TextView(this).apply {
             textSize = 22f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.WHITE)
-        }
-        statusText = TextView(this).apply {
-            textSize = 16f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(0xB8FFFFFF.toInt())
-        }
-        labels.addView(titleText)
-        labels.addView(statusText)
-        row.addView(labels, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-
-        progress = ProgressBar(this).apply {
-            visibility = View.GONE
-            isIndeterminate = true
-        }
-        row.addView(progress, LinearLayout.LayoutParams(dp(42), dp(42)))
-        return row
-    }
-
-    private fun makeGuidanceCard(): LinearLayout =
-        LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(22), dp(20), dp(22), dp(20))
-            background = glassPanel(PALETTE_GLASS_STRONG, PALETTE_PRIMARY, dp(26), dp(2))
-            elevation = dp(18).toFloat()
-
-            guidanceLabel = TextView(context).apply {
-                text = "안내"
-                textSize = 16f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(PALETTE_PRIMARY)
-            }
-            guidanceText = TextView(context).apply {
-                textSize = 32f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.WHITE)
-                setLineSpacing(dp(4).toFloat(), 1f)
-                maxLines = 3
-                setAutoSizeTextTypeUniformWithConfiguration(22, 32, 2, TypedValue.COMPLEX_UNIT_SP)
-                setPadding(0, dp(12), 0, 0)
-            }
-            addView(guidanceLabel)
-            addView(guidanceText)
-        }
-
-    private fun makeOcrPanel(): LinearLayout =
-        LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(18), dp(20), dp(18))
-            background = glassPanel(PALETTE_GLASS_STRONG, PALETTE_PRIMARY, dp(24), dp(2))
-            elevation = dp(18).toFloat()
-
-            ocrStatusText = TextView(context).apply {
-                textSize = 20f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.WHITE)
-            }
-            ocrResultText = TextView(context).apply {
-                textSize = 26f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.WHITE)
-                setLineSpacing(dp(6).toFloat(), 1f)
-                setAutoSizeTextTypeUniformWithConfiguration(18, 26, 2, TypedValue.COMPLEX_UNIT_SP)
-                setPadding(0, dp(14), 0, 0)
-            }
-            val scroll = ScrollView(context).apply { addView(ocrResultText) }
-            addView(ocrStatusText)
-            addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(210)))
-        }
-
-    private fun makeDirectionStrip(): View {
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
+            setLineSpacing(dp(3).toFloat(), 1f)
+            maxLines = 3
             setPadding(0, dp(10), 0, 0)
+            setAutoSizeTextTypeUniformWithConfiguration(16, 22, 1, TypedValue.COMPLEX_UNIT_SP)
         }
-        directionButtons = listOf("왼쪽", "정면", "오른쪽").map { label ->
-            TextView(this).apply {
-                text = label
-                gravity = Gravity.CENTER
-                textSize = 14f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.WHITE)
-            }.also {
-                val params = LinearLayout.LayoutParams(0, dp(64), 1f).apply {
-                    marginEnd = dp(8)
+        guidanceCard.addView(guidanceMsg, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ))
+
+        val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        lp.bottomMargin = dp(8)
+        guidanceCard.layoutParams = lp
+        return guidanceCard
+    }
+
+    // ── OCR Card ──────────────────────────────────────────────
+    private fun buildOcrCard(): LinearLayout {
+        ocrCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(16), dp(18), dp(18))
+            background  = glassCard(C_PRIMARY, dp(20))
+            elevation   = dp(12).toFloat()
+        }
+
+        val topRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity     = Gravity.CENTER_VERTICAL
+        }
+
+        // small icon badge
+        val iconBadge = TextView(this).apply {
+            text      = "OCR"
+            textSize  = 9f
+            typeface  = Typeface.DEFAULT_BOLD
+            gravity   = Gravity.CENTER
+            setTextColor(C_PRIMARY)
+            background = rounded(0x261AADFF.toInt(), dp(7))
+            setPadding(dp(6), dp(4), dp(6), dp(4))
+        }
+        topRow.addView(iconBadge)
+
+        ocrStatusLbl = TextView(this).apply {
+            textSize = 13f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(0x78FFFFFF.toInt())
+            setPadding(dp(10), 0, 0, 0)
+        }
+        topRow.addView(ocrStatusLbl, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+
+        val spin2 = ProgressBar(this).apply { isIndeterminate = true; scaleX = 0.65f; scaleY = 0.65f }
+        topRow.addView(spin2, dp(24), dp(24))
+        ocrCard.addView(topRow)
+
+        ocrDivider = View(this).apply { background = GradientDrawable().apply { setColor(0x14FFFFFF) } }
+        val divLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1))
+        divLp.topMargin = dp(14); divLp.bottomMargin = dp(14)
+        ocrCard.addView(ocrDivider, divLp)
+
+        ocrResultLbl = TextView(this).apply {
+            textSize = 26f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            setLineSpacing(dp(4).toFloat(), 1f)
+            setAutoSizeTextTypeUniformWithConfiguration(18, 26, 1, TypedValue.COMPLEX_UNIT_SP)
+        }
+        ocrCard.addView(ocrResultLbl, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ))
+
+        val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        lp.bottomMargin = dp(8)
+        ocrCard.layoutParams = lp
+        return ocrCard
+    }
+
+    // ── Direction Strip ───────────────────────────────────────
+    private fun buildDirStrip(): View {
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val labels = listOf("왼쪽", "정면", "오른쪽")
+        dirButtons = labels.map { lbl ->
+            LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity     = Gravity.CENTER
+                background  = glassCard(0x00000000, dp(14))
+                elevation   = dp(4).toFloat()
+
+                val arrow = TextView(this@MainActivity).apply {
+                    text      = when (lbl) { "왼쪽" -> "←"; "오른쪽" -> "→"; else -> "↑" }
+                    textSize  = 15f
+                    typeface  = Typeface.DEFAULT_BOLD
+                    gravity   = Gravity.CENTER
+                    setTextColor(0x59FFFFFF.toInt())
                 }
-                row.addView(it, params)
-            }
+                val label = TextView(this@MainActivity).apply {
+                    text      = lbl
+                    textSize  = 9f
+                    typeface  = Typeface.DEFAULT_BOLD
+                    gravity   = Gravity.CENTER
+                    letterSpacing = 0.05f
+                    setTextColor(0x4CFFFFFF.toInt())
+                    setPadding(0, dp(2), 0, 0)
+                }
+                addView(arrow)
+                addView(label)
+
+                val lp = LinearLayout.LayoutParams(0, dp(54), 1f)
+                lp.marginEnd = if (lbl != "오른쪽") dp(7) else 0
+                layoutParams = lp
+            }.also { row.addView(it) }
         }
+        val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(54))
+        lp.bottomMargin = dp(8)
+        row.layoutParams = lp
         return row
     }
 
-    private fun makeModeSelector(): View {
+    // ── Mode Bar (bottom) ─────────────────────────────────────
+    private fun buildModeBar(): View {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(dp(8), dp(8), dp(8), dp(8))
-            background = glassPanel(PALETTE_GLASS, 0x2EFFFFFF, dp(26), dp(1))
-            elevation = dp(16).toFloat()
+            setPadding(dp(6), dp(6), dp(6), dp(6))
+            background  = glassCard(0x00000000, dp(22))
+            elevation   = dp(12).toFloat()
         }
 
-        liveButton = modeButton("실시간") { setMode(ProcessingMode.LIVE) }
-        textButton = modeButton("문자 읽기") { setMode(ProcessingMode.TEXT) }
-        row.addView(liveButton, LinearLayout.LayoutParams(0, dp(58), 1f))
-        row.addView(textButton, LinearLayout.LayoutParams(0, dp(58), 1f).apply { marginStart = dp(10) })
+        btnLive = modeBtn("실시간")  { setMode(ProcessingMode.LIVE) }
+        btnOcr  = modeBtn("문자 읽기") { setMode(ProcessingMode.TEXT) }
+
+        row.addView(btnLive, LinearLayout.LayoutParams(0, dp(48), 1f))
+        val ocrlp = LinearLayout.LayoutParams(0, dp(48), 1f)
+        ocrlp.marginStart = dp(7)
+        row.addView(btnOcr, ocrlp)
         return row
     }
 
-    private fun modeButton(label: String, onClick: () -> Unit): Button =
-        Button(this).apply {
-            text = label
-            textSize = 16f
+    private fun modeBtn(label: String, onClick: () -> Unit): LinearLayout {
+        val tv = TextView(this).apply {
+            text     = label
+            textSize = 14f
             typeface = Typeface.DEFAULT_BOLD
+            gravity  = Gravity.CENTER
             isAllCaps = false
-            minHeight = 0
-            minWidth = 0
-            includeFontPadding = false
+            setTextColor(0x99FFFFFF.toInt())
+        }
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity     = Gravity.CENTER
+            background  = rounded(0x00000000, dp(16))
             setOnClickListener { onClick() }
+            addView(tv, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            tag = tv
+        }
+    }
+
+    // ── Render ────────────────────────────────────────────────
+    private fun renderState() {
+        val isOcr = currentMode == ProcessingMode.TEXT
+
+        statusLabel.text = if (isOcr) "문자 읽기" else "보행 안내"
+        (statusDot.background as? GradientDrawable)?.setColor(if (isOcr) C_PRIMARY else C_LIVE)
+        spinnerRef.visibility = if (isProcessing) View.VISIBLE else View.GONE
+
+        guidanceCard.visibility = if (isOcr) View.GONE else View.VISIBLE
+        ocrCard.visibility      = if (isOcr) View.VISIBLE else View.GONE
+
+        // guidance card
+        val sev = severityColor()
+        guidanceMsg.text = latestGuide
+        guidanceTag.setTextColor(sev)
+        guidanceTag.text = when {
+            latestLiveRiskScore >= 85 -> "위험"
+            latestLiveRiskScore >= 55 -> "주의"
+            else -> "안내"
+        }
+        guidanceCard.background = glassCard(sev and 0x00FFFFFF or 0x24000000, dp(20))
+        // stroke tint via border
+        (guidanceCard.background as? GradientDrawable)?.setStroke(dp(1), sev and 0x00FFFFFF or 0x47000000)
+
+        // ocr card
+        ocrStatusLbl.text = liveOcrStatus.message
+        val hasResult = !latestDetectedText.isNullOrBlank()
+        ocrDivider.visibility   = if (hasResult) View.VISIBLE else View.GONE
+        ocrResultLbl.visibility = if (hasResult) View.VISIBLE else View.GONE
+        ocrResultLbl.text       = latestDetectedText.orEmpty()
+
+        // dir strip
+        dirButtons.forEachIndexed { i, cell ->
+            val dir = when (i) { 0 -> "left"; 2 -> "right"; else -> "center" }
+            val active = !isOcr && latestLiveDirection == dir
+            cell.visibility = if (isOcr) View.GONE else View.VISIBLE
+            cell.background = if (active)
+                glassCard(sev and 0x00FFFFFF or 0x24000000, dp(14)).also {
+                    it.setStroke(dp(1), sev and 0x00FFFFFF or 0x73000000)
+                }
+            else glassCard(0x00000000, dp(14))
+            val arrow = cell.getChildAt(0) as? TextView
+            val label = cell.getChildAt(1) as? TextView
+            val tc = if (active) sev else 0x47FFFFFF.toInt()
+            arrow?.setTextColor(tc); label?.setTextColor(tc)
         }
 
+        // mode bar
+        listOf(btnLive to (currentMode == ProcessingMode.LIVE),
+               btnOcr  to (currentMode == ProcessingMode.TEXT))
+            .forEach { (btn, on) ->
+                btn.background = if (on) rounded(C_PRIMARY, dp(16)) else rounded(0x00000000, dp(16))
+                (btn.tag as? TextView)?.setTextColor(
+                    if (on) Color.parseColor("#020F24") else 0x66FFFFFF.toInt()
+                )
+                btn.elevation = if (on) dp(6).toFloat() else 0f
+            }
+    }
+
+    // ── setMode (unchanged logic) ─────────────────────────────
     private fun setMode(mode: ProcessingMode) {
         currentMode = mode
         stabilityTracker.reset()
         latestDetectedText = null
-        liveOcrStatus = LiveOcrStatus.SEARCHING
+        liveOcrStatus      = LiveOcrStatus.SEARCHING
         latestLiveDirection = "center"
         latestLiveRiskScore = 0
 
         latestGuide = if (mode == ProcessingMode.LIVE) {
-            pulse(35)
-            "실시간 보행 안내를 시작할게요."
+            pulse(35); "실시간 보행 안내를 시작할게요."
         } else {
-            pulse(65)
-            "문자 읽기 모드예요. 카메라를 가까운 문자에 맞춰 주세요."
+            pulse(65); "문자 읽기 모드예요. 카메라를 가까운 문자에 맞춰 주세요."
         }
         renderState()
         if (mode == ProcessingMode.LIVE) speak(latestGuide)
     }
 
+    // ── Camera / Processing (unchanged) ──────────────────────
     private fun startCamera() {
-        val providerFuture = ProcessCameraProvider.getInstance(this)
-        providerFuture.addListener({
-            val cameraProvider = providerFuture.get()
-            val preview = Preview.Builder().build().also {
-                it.setSurfaceProvider(previewView.surfaceProvider)
-            }
+        val fut = ProcessCameraProvider.getInstance(this)
+        fut.addListener({
+            val cp = fut.get()
+            val preview  = Preview.Builder().build().also { it.setSurfaceProvider(previewView.surfaceProvider) }
             val analysis = ImageAnalysis.Builder()
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                .build()
-                .also { it.setAnalyzer(cameraExecutor, FrameAnalyzer()) }
-
-            cameraProvider.unbindAll()
-            cameraProvider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
+                .build().also { it.setAnalyzer(cameraExecutor, FrameAnalyzer()) }
+            cp.unbindAll()
+            cp.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
             setMode(currentMode)
         }, ContextCompat.getMainExecutor(this))
     }
 
-    private fun processImage(bitmap: android.graphics.Bitmap, mode: ProcessingMode, allowDuplicateSpeech: Boolean) {
+    private fun processImage(bmp: android.graphics.Bitmap, mode: ProcessingMode, allowDup: Boolean) {
         if (isProcessing) return
         isProcessing = true
         runOnUiThread { renderState() }
-
-        thread(name = "backend-analysis") {
-            val response = ocrService.analyze(bitmap, mode)
-            if (currentMode != mode) {
-                isProcessing = false
-                runOnUiThread { renderState() }
-                return@thread
-            }
-
-            val shouldSpeak = shouldSpeak(response, mode, allowDuplicateSpeech)
-            if (shouldSpeak && mode == ProcessingMode.TEXT) pulse(90)
-
+        thread(name = "backend") {
+            val resp = ocrService.analyze(bmp, mode)
+            if (currentMode != mode) { isProcessing = false; runOnUiThread { renderState() }; return@thread }
+            val speak = shouldSpeak(resp, mode, allowDup)
+            if (speak && mode == ProcessingMode.TEXT) pulse(90)
             runOnUiThread {
-                updateResponse(response)
+                updateResponse(resp)
                 isProcessing = false
                 if (mode == ProcessingMode.TEXT) {
-                    liveOcrStatus = if (response.status == "error") LiveOcrStatus.SEARCHING else LiveOcrStatus.COOLING_DOWN
-                    if (response.status == "error") pulse(35) else if (!shouldSpeak) pulse(45)
+                    liveOcrStatus = if (resp.status == "error") LiveOcrStatus.SEARCHING else LiveOcrStatus.COOLING_DOWN
+                    if (resp.status == "error") pulse(35) else if (!speak) pulse(45)
                 }
                 renderState()
             }
-
-            if (shouldSpeak) speak(response.voiceGuide)
+            if (speak) speak(resp.voiceGuide)
         }
     }
 
-    private fun shouldSpeak(response: AnalysisResponse, mode: ProcessingMode, allowDuplicateSpeech: Boolean): Boolean {
-        if (mode == ProcessingMode.LIVE) return true
-        if (response.status == "error") return true
-        val detectedText = response.detectedText
-        if (detectedText.isNullOrBlank()) return allowDuplicateSpeech
-        return allowDuplicateSpeech || duplicateSuppressor.shouldSpeak(detectedText)
+    private fun shouldSpeak(r: AnalysisResponse, m: ProcessingMode, allowDup: Boolean): Boolean {
+        if (m == ProcessingMode.LIVE) return true
+        if (r.status == "error") return true
+        val t = r.detectedText
+        return if (t.isNullOrBlank()) allowDup else allowDup || duplicateSuppressor.shouldSpeak(t)
     }
 
-    private fun updateResponse(response: AnalysisResponse) {
-        latestGuide = response.voiceGuide.ifBlank { latestGuide }
-        latestDetectedText = response.detectedText
-
-        if (response.mode == ProcessingMode.LIVE.wireName && response.status != "error") {
-            val primaryDetection = response.detections?.firstOrNull()
-            latestLiveDirection = primaryDetection?.position ?: "center"
-            latestLiveRiskScore = primaryDetection?.riskScore ?: 0
-        } else if (response.mode == ProcessingMode.LIVE.wireName) {
-            latestLiveDirection = "center"
-            latestLiveRiskScore = 0
+    private fun updateResponse(r: AnalysisResponse) {
+        latestGuide = r.voiceGuide.ifBlank { latestGuide }
+        latestDetectedText = r.detectedText
+        if (r.mode == ProcessingMode.LIVE.wireName && r.status != "error") {
+            val p = r.detections?.firstOrNull()
+            latestLiveDirection = p?.position ?: "center"
+            latestLiveRiskScore = p?.riskScore ?: 0
+        } else if (r.mode == ProcessingMode.LIVE.wireName) {
+            latestLiveDirection = "center"; latestLiveRiskScore = 0
         }
     }
 
-    private fun updateLiveOcrStatus(status: LiveOcrStatus) {
-        if (currentMode != ProcessingMode.TEXT || (isProcessing && status != LiveOcrStatus.READING)) return
-        liveOcrStatus = status
-        if (latestDetectedText.isNullOrBlank()) latestGuide = status.message
+    private fun updateLiveOcrStatus(s: LiveOcrStatus) {
+        if (currentMode != ProcessingMode.TEXT || (isProcessing && s != LiveOcrStatus.READING)) return
+        liveOcrStatus = s
+        if (latestDetectedText.isNullOrBlank()) latestGuide = s.message
         runOnUiThread { renderState() }
     }
 
-    private fun renderState() {
-        val textMode = currentMode == ProcessingMode.TEXT
-        titleText.text = if (textMode) "문자 읽기" else "보행 안내"
-        statusText.text = if (isProcessing) "처리 중" else if (textMode) "준비됨" else "주변 확인 중"
-        progress.visibility = if (isProcessing) View.VISIBLE else View.GONE
-
-        guidanceCard.visibility = if (textMode) View.GONE else View.VISIBLE
-        ocrPanel.visibility = if (textMode) View.VISIBLE else View.GONE
-        guidanceText.text = latestGuide
-        ocrStatusText.text = liveOcrStatus.message
-        ocrResultText.text = latestDetectedText.orEmpty()
-
-        val severityColor = severityColor()
-        guidanceLabel.setTextColor(severityColor)
-        guidanceCard.background = glassPanel(PALETTE_GLASS_STRONG, severityColor, dp(26), dp(2))
-
-        liveButton.background = activeButton(if (!textMode) PALETTE_PRIMARY else PALETTE_PASSIVE, !textMode)
-        liveButton.elevation = if (!textMode) dp(8).toFloat() else 0f
-        liveButton.setTextColor(if (!textMode) Color.BLACK else Color.WHITE)
-        textButton.background = activeButton(if (textMode) PALETTE_PRIMARY else PALETTE_PASSIVE, textMode)
-        textButton.elevation = if (textMode) dp(8).toFloat() else 0f
-        textButton.setTextColor(if (textMode) Color.BLACK else Color.WHITE)
-
-        directionButtons.forEachIndexed { index, view ->
-            val direction = when (index) {
-                0 -> "left"
-                2 -> "right"
-                else -> "center"
-            }
-            val active = latestLiveDirection == direction
-            view.background = glassPanel(if (active) severityColor else PALETTE_PASSIVE, if (active) 0xA6FFFFFF.toInt() else 0x30FFFFFF, dp(16), dp(1))
-            view.elevation = if (active) dp(8).toFloat() else dp(3).toFloat()
-            view.setTextColor(if (active) Color.BLACK else 0xC7FFFFFF.toInt())
-            view.visibility = if (textMode) View.GONE else View.VISIBLE
-        }
-    }
-
-    private fun severityColor(): Int =
-        when {
-            latestLiveRiskScore >= 85 -> PALETTE_DANGER
-            latestLiveRiskScore >= 55 -> PALETTE_WARNING
-            else -> PALETTE_PRIMARY
-        }
-
-    private fun speak(message: String) {
-        if (message.isBlank()) return
-        runOnUiThread {
-            textToSpeech?.speak(message, TextToSpeech.QUEUE_FLUSH, null, "guide-${System.currentTimeMillis()}")
-        }
+    private fun speak(msg: String) {
+        if (msg.isBlank()) return
+        runOnUiThread { textToSpeech?.speak(msg, TextToSpeech.QUEUE_FLUSH, null, "g-${System.currentTimeMillis()}") }
     }
 
     private fun configureTtsVoice() {
         textToSpeech?.apply {
             language = Locale.KOREAN
-            setSpeechRate(TTS_SPEECH_RATE)
-            setPitch(TTS_PITCH)
-
-            voices
-                ?.filter { it.locale.language == Locale.KOREAN.language }
+            setSpeechRate(0.92f); setPitch(1.04f)
+            voices?.filter { it.locale.language == Locale.KOREAN.language }
                 ?.filterNot { it.features?.contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED) == true }
-                ?.sortedWith(
-                    compareByDescending<Voice> { it.quality }
-                        .thenBy { it.latency }
-                )
-                ?.firstOrNull()
-                ?.let { voice = it }
+                ?.sortedWith(compareByDescending<Voice> { it.quality }.thenBy { it.latency })
+                ?.firstOrNull()?.let { voice = it }
         }
     }
 
-    private fun pulse(durationMs: Long) {
-        vibrator?.vibrate(VibrationEffect.createOneShot(durationMs, VibrationEffect.DEFAULT_AMPLITUDE))
+    private fun pulse(ms: Long) {
+        vibrator?.vibrate(VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE))
     }
 
-    private fun hasCameraPermission(): Boolean =
+    private fun hasCameraPermission() =
         ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
 
-    private fun rounded(color: Int, radius: Int): GradientDrawable =
-        GradientDrawable().apply {
-            setColor(color)
-            cornerRadius = radius.toFloat()
-        }
+    // ── Draw helpers ──────────────────────────────────────────
+    private fun rounded(color: Int, r: Int) = GradientDrawable().apply { setColor(color); cornerRadius = r.toFloat() }
+    private fun circle(color: Int)          = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(color) }
+    private fun pillBg() = GradientDrawable().apply {
+        setColor(0x12FFFFFF); cornerRadius = dp(18).toFloat()
+        setStroke(dp(1), 0x1AFFFFFF)
+    }
+    private fun glassCard(stroke: Int, r: Int) = GradientDrawable().apply {
+        setColor(0xBA060A18.toInt()); cornerRadius = r.toFloat()
+        setStroke(dp(1), stroke or 0x1A000000)
+    }
+    private fun spacer() = View(this).apply {
+        layoutParams = LinearLayout.LayoutParams(1, 0, 1f)
+    }
+    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
-    private fun bordered(color: Int, strokeColor: Int, radius: Int, strokeWidth: Int): GradientDrawable =
-        rounded(color, radius).apply { setStroke(strokeWidth, strokeColor) }
-
-    private fun glassPanel(color: Int, strokeColor: Int, radius: Int, strokeWidth: Int): GradientDrawable =
-        GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(0x26FFFFFF, color, PALETTE_GLASS_DEEP)).apply {
-            cornerRadius = radius.toFloat()
-            setStroke(strokeWidth, strokeColor)
-        }
-
-    private fun activeButton(color: Int, active: Boolean): GradientDrawable =
-        GradientDrawable(
-            GradientDrawable.Orientation.TL_BR,
-            if (active) intArrayOf(0xFF47C7FF.toInt(), color, 0xFF4064FF.toInt()) else intArrayOf(0x1AFFFFFF, color)
-        ).apply {
-            cornerRadius = dp(16).toFloat()
-            setStroke(dp(1), if (active) 0x8AFFFFFF.toInt() else 0x24FFFFFF)
-        }
-
-    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
-
+    // ── FrameAnalyzer (unchanged) ─────────────────────────────
     private inner class FrameAnalyzer : ImageAnalysis.Analyzer {
         private val recognizer = TextRecognition.getClient(KoreanTextRecognizerOptions.Builder().build())
-        private var isAnalyzingText = false
-        private var lastTextAnalysisMs = 0L
-        private var previousLumaSample: List<Double>? = null
+        private var isAnalyzing = false
+        private var lastAnalysisMs = 0L
+        private var prevLuma: List<Double>? = null
 
         @OptIn(ExperimentalGetImage::class)
-        override fun analyze(imageProxy: ImageProxy) {
-            when (currentMode) {
-                ProcessingMode.LIVE -> analyzeLive(imageProxy)
-                ProcessingMode.TEXT -> analyzeText(imageProxy)
-            }
+        override fun analyze(proxy: ImageProxy) {
+            when (currentMode) { ProcessingMode.LIVE -> live(proxy); ProcessingMode.TEXT -> text(proxy) }
         }
 
-        private fun analyzeLive(imageProxy: ImageProxy) {
+        private fun live(proxy: ImageProxy) {
             val now = System.currentTimeMillis()
-            if (isProcessing || now - lastLiveRequestMs < LIVE_REQUEST_INTERVAL_MS) {
-                imageProxy.close()
-                return
-            }
-
-            val bitmap = ImageProxyBitmapConverter.toBitmap(imageProxy)
-            imageProxy.close()
-            if (bitmap == null) return
-
+            if (isProcessing || now - lastLiveRequestMs < 2_000L) { proxy.close(); return }
+            val bmp = ImageProxyBitmapConverter.toBitmap(proxy); proxy.close()
+            if (bmp == null) return
             lastLiveRequestMs = now
-            processImage(bitmap, ProcessingMode.LIVE, allowDuplicateSpeech = true)
+            processImage(bmp, ProcessingMode.LIVE, true)
         }
 
         @OptIn(ExperimentalGetImage::class)
-        private fun analyzeText(imageProxy: ImageProxy) {
+        private fun text(proxy: ImageProxy) {
             val now = System.currentTimeMillis()
-            val mediaImage = imageProxy.image
-            if (mediaImage == null || isAnalyzingText || now - lastTextAnalysisMs < TEXT_FRAME_INTERVAL_MS) {
-                imageProxy.close()
-                return
-            }
-
-            isAnalyzingText = true
-            lastTextAnalysisMs = now
-            val sample = ImageProxyBitmapConverter.lumaSample(imageProxy)
-            val blurScore = blurScore(sample)
-            val movementScore = movementScore(sample)
-            previousLumaSample = sample
-
-            val inputImage = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
-            recognizer.process(inputImage)
-                .addOnSuccessListener { result ->
-                    val analysis = frameAnalysis(result, imageProxy.width, imageProxy.height, blurScore, movementScore)
+            val img = proxy.image
+            if (img == null || isAnalyzing || now - lastAnalysisMs < 160L) { proxy.close(); return }
+            isAnalyzing = true; lastAnalysisMs = now
+            val sample = ImageProxyBitmapConverter.lumaSample(proxy)
+            val blur   = blurScore(sample)
+            val move   = moveScore(sample)
+            prevLuma   = sample
+            val input  = InputImage.fromMediaImage(img, proxy.imageInfo.rotationDegrees)
+            recognizer.process(input)
+                .addOnSuccessListener { res ->
+                    val analysis = frameAnalysis(res, proxy.width, proxy.height, blur, move)
                     val decision = stabilityTracker.update(analysis)
                     updateLiveOcrStatus(decision.status)
-
                     if (decision.shouldRunFullOcr && currentMode == ProcessingMode.TEXT && !isProcessing) {
-                        if (now - lastFullOcrRequestMs >= FULL_OCR_COOLDOWN_MS) {
-                            val bitmap = ImageProxyBitmapConverter.toBitmap(imageProxy)
+                        if (now - lastFullOcrRequestMs >= 3_000L) {
+                            val bmp = ImageProxyBitmapConverter.toBitmap(proxy)
                             lastFullOcrRequestMs = now
-                            if (bitmap != null) {
-                                liveOcrStatus = LiveOcrStatus.READING
-                                processImage(bitmap, ProcessingMode.TEXT, allowDuplicateSpeech = false)
-                            }
-                        } else {
-                            updateLiveOcrStatus(LiveOcrStatus.COOLING_DOWN)
-                        }
+                            if (bmp != null) { liveOcrStatus = LiveOcrStatus.READING; processImage(bmp, ProcessingMode.TEXT, false) }
+                        } else updateLiveOcrStatus(LiveOcrStatus.COOLING_DOWN)
                     }
                 }
-                .addOnCompleteListener {
-                    isAnalyzingText = false
-                    imageProxy.close()
-                }
+                .addOnCompleteListener { isAnalyzing = false; proxy.close() }
         }
 
-        private fun frameAnalysis(
-            text: Text,
-            imageWidth: Int,
-            imageHeight: Int,
-            blurScore: Double,
-            movementScore: Double
-        ): OcrFrameAnalysis {
-            val boxes = text.textBlocks.mapNotNull { it.boundingBox }
-            val region = boxes.reduceOrNull { acc, rect ->
-                android.graphics.Rect(
-                    minOf(acc.left, rect.left),
-                    minOf(acc.top, rect.top),
-                    maxOf(acc.right, rect.right),
-                    maxOf(acc.bottom, rect.bottom)
-                )
-            }?.let { box ->
-                RectRatio(
-                    left = box.left.toFloat() / imageWidth.toFloat(),
-                    top = box.top.toFloat() / imageHeight.toFloat(),
-                    right = box.right.toFloat() / imageWidth.toFloat(),
-                    bottom = box.bottom.toFloat() / imageHeight.toFloat()
-                )
+        private fun frameAnalysis(t: Text, w: Int, h: Int, blur: Double, move: Double): OcrFrameAnalysis {
+            val boxes = t.textBlocks.mapNotNull { it.boundingBox }
+            val region = boxes.reduceOrNull { a, b ->
+                android.graphics.Rect(minOf(a.left,b.left),minOf(a.top,b.top),maxOf(a.right,b.right),maxOf(a.bottom,b.bottom))
+            }?.let { RectRatio(it.left.toFloat()/w,it.top.toFloat()/h,it.right.toFloat()/w,it.bottom.toFloat()/h) }
+            return OcrFrameAnalysis(region, if(boxes.isEmpty()) 0f else 0.8f, blur, move, System.currentTimeMillis())
+        }
+
+        private fun blurScore(s: List<Double>): Double {
+            if (s.isEmpty()) return 0.0; val c=24; var e=0.0; var n=0
+            s.indices.forEach { i ->
+                if (i%c!=c-1){e+=abs(s[i]-s[i+1]);n++}
+                val j=i+c; if(j<s.size){e+=abs(s[i]-s[j]);n++}
             }
-
-            return OcrFrameAnalysis(
-                textRegion = region,
-                confidence = if (boxes.isEmpty()) 0f else 0.8f,
-                blurScore = blurScore,
-                movementScore = movementScore,
-                timestampMs = System.currentTimeMillis()
-            )
+            return if(n==0) 0.0 else e/n
         }
-
-        private fun blurScore(sample: List<Double>): Double {
-            if (sample.isEmpty()) return 0.0
-            val columns = 24
-            var edgeEnergy = 0.0
-            var comparisons = 0
-            sample.indices.forEach { index ->
-                if (index % columns != columns - 1) {
-                    edgeEnergy += abs(sample[index] - sample[index + 1])
-                    comparisons += 1
-                }
-                val lowerIndex = index + columns
-                if (lowerIndex < sample.size) {
-                    edgeEnergy += abs(sample[index] - sample[lowerIndex])
-                    comparisons += 1
-                }
-            }
-            return if (comparisons == 0) 0.0 else edgeEnergy / comparisons.toDouble()
-        }
-
-        private fun movementScore(current: List<Double>): Double {
-            val previous = previousLumaSample
-            if (previous == null || previous.size != current.size) return 0.0
-            return previous.zip(current).sumOf { abs(it.first - it.second) } / current.size.toDouble()
+        private fun moveScore(cur: List<Double>): Double {
+            val p=prevLuma; return if(p==null||p.size!=cur.size) 0.0
+            else p.zip(cur).sumOf{abs(it.first-it.second)}/cur.size
         }
     }
 
     companion object {
-        private const val CAMERA_PERMISSION_REQUEST = 10
         private const val SERVER_URL = "http://100.64.174.44:8000/analyze"
-        private const val LIVE_REQUEST_INTERVAL_MS = 2_000L
-        private const val FULL_OCR_COOLDOWN_MS = 3_000L
-        private const val TEXT_FRAME_INTERVAL_MS = 160L
-        private const val TTS_SPEECH_RATE = 0.92f
-        private const val TTS_PITCH = 1.04f
+        private val C_PRIMARY = 0xFF46BFFF.toInt()
+        private val C_LIVE    = 0xFF29D18F.toInt()
+        private val C_WARNING = 0xFFFF941F.toInt()
+        private val C_DANGER  = 0xFFFF2E2E.toInt()
+    }
 
-        private const val PALETTE_PRIMARY = 0xFF46BFFF.toInt()
-        private const val PALETTE_LIVE = 0xFF29D18F.toInt()
-        private const val PALETTE_WARNING = 0xFFFF941F.toInt()
-        private const val PALETTE_DANGER = 0xFFFF2E2E.toInt()
-        private const val PALETTE_PASSIVE = 0x2EFFFFFF
-        private const val PALETTE_GLASS = 0xA61A263B.toInt()
-        private const val PALETTE_GLASS_STRONG = 0xC61A2537.toInt()
-        private const val PALETTE_GLASS_DEEP = 0xE60A1020.toInt()
+    private fun severityColor() = when {
+        latestLiveRiskScore >= 85 -> C_DANGER
+        latestLiveRiskScore >= 55 -> C_WARNING
+        else -> C_PRIMARY
     }
 }
