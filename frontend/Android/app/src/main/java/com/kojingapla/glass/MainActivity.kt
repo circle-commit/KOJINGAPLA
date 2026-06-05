@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.speech.tts.TextToSpeech
+import android.speech.tts.Voice
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
@@ -85,7 +86,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
-            textToSpeech?.language = Locale.KOREAN
+            configureTtsVoice()
         }
     }
 
@@ -293,10 +294,10 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
         latestGuide = if (mode == ProcessingMode.LIVE) {
             pulse(35)
-            "실시간 보행 안내를 시작합니다."
+            "실시간 보행 안내를 시작할게요."
         } else {
             pulse(65)
-            "문자 읽기 모드입니다. 카메라를 가까운 문자에 맞춰주세요."
+            "문자 읽기 모드예요. 카메라를 가까운 문자에 맞춰 주세요."
         }
         renderState()
         if (mode == ProcessingMode.LIVE) speak(latestGuide)
@@ -424,6 +425,24 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         if (message.isBlank()) return
         runOnUiThread {
             textToSpeech?.speak(message, TextToSpeech.QUEUE_FLUSH, null, "guide-${System.currentTimeMillis()}")
+        }
+    }
+
+    private fun configureTtsVoice() {
+        textToSpeech?.apply {
+            language = Locale.KOREAN
+            setSpeechRate(TTS_SPEECH_RATE)
+            setPitch(TTS_PITCH)
+
+            voices
+                ?.filter { it.locale.language == Locale.KOREAN.language }
+                ?.filterNot { it.features?.contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED) == true }
+                ?.sortedWith(
+                    compareByDescending<Voice> { it.quality }
+                        .thenBy { it.latency }
+                )
+                ?.firstOrNull()
+                ?.let { voice = it }
         }
     }
 
@@ -581,6 +600,8 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         private const val LIVE_REQUEST_INTERVAL_MS = 2_000L
         private const val FULL_OCR_COOLDOWN_MS = 3_000L
         private const val TEXT_FRAME_INTERVAL_MS = 160L
+        private const val TTS_SPEECH_RATE = 0.92f
+        private const val TTS_PITCH = 1.04f
 
         private const val PALETTE_PRIMARY = 0xFFFFD61F.toInt()
         private const val PALETTE_LIVE = 0xFF29D18F.toInt()

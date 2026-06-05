@@ -329,7 +329,7 @@ def build_warning_message(detection: dict[str, Any]) -> str:
     label = str(detection.get("label", ""))
     korean_label = str(detection.get("korean_label") or "장애물")
     if detection.get("approaching"):
-        return f"{korean_label}{_particle_for(korean_label)} 가까워지고 있습니다."
+        return f"{korean_label}{_particle_for(korean_label)} 가까워지고 있어요."
     if label in OBSTACLE_LABELS:
         return f"{korean_label} 주의"
     return f"{korean_label} 감지"
@@ -370,23 +370,23 @@ def build_detection_message(detection: dict[str, Any], event_type: str) -> str:
     templates = [
         ("왼쪽에 {korean_label}{particle} 있어요.", 18, _low_left, {"low", "side", "natural"}),
         ("오른쪽에 {korean_label}{particle} 있어요.", 18, _low_right, {"low", "side", "natural"}),
-        ("{position_ko}에 {korean_label}{particle} 보입니다.", 13, _medium_visible, {"medium", "new"}),
-        ("{position_ko}에 {korean_label}{particle} 보여요. 조심해서 지나가세요.", 12, _medium_visible, {"medium", "action"}),
-        ("{front_word}에 {korean_label}{particle} 있습니다. 천천히 이동하세요.", 26, _front_obstacle, {"obstacle", "front", "action", "medium"}),
-        ("{front_word}에 장애물이 있으니 천천히 이동하세요.", 24, _front_obstacle, {"obstacle", "front", "action", "medium"}),
-        ("정면에 {korean_label}{particle} 있습니다. 조심하세요.", 24, _front_obstacle_named, {"obstacle", "front", "urgent"}),
-        ("정면 {korean_label}{particle} 가까워지고 있습니다. 잠시 멈춰주세요.", 34, _center_approaching, {"approaching", "front", "urgent", "action"}),
-        ("정면의 {korean_label}{particle} 가까워지고 있습니다. 주의하세요.", 22, _center_approaching, {"approaching", "front", "urgent"}),
-        ("주의하세요. {korean_label}{particle} 바로 앞에 있습니다.", 34, _critical_front, {"critical", "front", "urgent", "action"}),
-        ("잠시 멈춰주세요. 정면에 {korean_label}{particle} 가깝습니다.", 30, _critical_front, {"critical", "front", "urgent", "action"}),
+        ("{position_ko}에 {korean_label}{particle} 보여요.", 13, _medium_visible, {"medium", "new"}),
+        ("{position_ko}에 {korean_label}{particle} 보여요. 조심해서 지나가 주세요.", 12, _medium_visible, {"medium", "action"}),
+        ("{front_word}에 {korean_label}{particle} 있어요. 천천히 이동해 주세요.", 26, _front_obstacle, {"obstacle", "front", "action", "medium"}),
+        ("{front_word}에 장애물이 있어요. 천천히 이동해 주세요.", 24, _front_obstacle, {"obstacle", "front", "action", "medium"}),
+        ("정면에 {korean_label}{particle} 있어요. 조심해 주세요.", 24, _front_obstacle_named, {"obstacle", "front", "urgent"}),
+        ("정면 {korean_label}{particle} 가까워지고 있어요. 잠시 멈춰 주세요.", 34, _center_approaching, {"approaching", "front", "urgent", "action"}),
+        ("정면의 {korean_label}{particle} 가까워지고 있어요. 주의해 주세요.", 22, _center_approaching, {"approaching", "front", "urgent"}),
+        ("주의해 주세요. {korean_label}{particle} 바로 앞에 있어요.", 34, _critical_front, {"critical", "front", "urgent", "action"}),
+        ("잠시 멈춰 주세요. 정면에 {korean_label}{particle} 가까워요.", 30, _critical_front, {"critical", "front", "urgent", "action"}),
         ("{position_from_ko} {korean_label}{particle} 다가오고 있어요.", 18, _side_approaching, {"approaching", "side", "natural"}),
-        ("{position_ko}의 {korean_label}{particle} 가까워지고 있습니다.", 18, _side_approaching, {"approaching", "side"}),
+        ("{position_ko}의 {korean_label}{particle} 가까워지고 있어요.", 18, _side_approaching, {"approaching", "side"}),
         ("{position_from_ko} {korean_label}{particle} 지나가고 있어요.", 20, _side_person, {"person", "side", "natural"}),
-        ("{position_ko}에 사람이 있어요. 살짝 주의하세요.", 11, _side_person, {"person", "side", "medium"}),
+        ("{position_ko}에 사람이 있어요. 살짝 주의해 주세요.", 11, _side_person, {"person", "side", "medium"}),
         ("{position_ko}에 {korean_label}{particle} 보여요.", 9, _side_person, {"person", "side", "new"}),
-        ("{front_word}에 {korean_label}{particle} 보여요. 주의하세요.", 24, _front_vehicle, {"vehicle", "front", "new", "urgent"}),
-        ("정면에 {korean_label}{particle} 가깝습니다. 조심하세요.", 22, _front_high_risk, {"front", "urgent", "near"}),
-        ("{position_ko}에 {korean_label}{particle} 있습니다. 주의하세요.", 13, _high_risk, {"urgent"}),
+        ("{front_word}에 {korean_label}{particle} 보여요. 주의해 주세요.", 24, _front_vehicle, {"vehicle", "front", "new", "urgent"}),
+        ("정면에 {korean_label}{particle} 가까워요. 조심해 주세요.", 22, _front_high_risk, {"front", "urgent", "near"}),
+        ("{position_ko}에 {korean_label}{particle} 있어요. 주의해 주세요.", 13, _high_risk, {"urgent"}),
         ("{position_ko}에 {korean_label}{particle} 가까이 있어요.", 14, _high_near, {"urgent", "near", "natural"}),
         ("{position_ko}에 {korean_label}{particle} 있어요.", 8, _any_guidance, {"natural"}),
         ("{position_ko}에 {korean_label}{particle} 보여요.", 7, _any_guidance, {"new", "natural"}),
@@ -398,7 +398,7 @@ def build_detection_message(detection: dict[str, Any], event_type: str) -> str:
         if applies(context)
     ]
     if not weighted_templates:
-        weighted_templates = [("{position_ko}에 {korean_label}{particle} 있습니다.", 1)]
+        weighted_templates = [("{position_ko}에 {korean_label}{particle} 있어요.", 1)]
 
     return _choose_weighted_template(weighted_templates).format(**context)
 
