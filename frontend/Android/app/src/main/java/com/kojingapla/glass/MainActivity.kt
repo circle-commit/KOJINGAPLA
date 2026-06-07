@@ -42,13 +42,26 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private val duplicateSuppressor = DuplicateTextSuppressor()
 
     private lateinit var previewView: PreviewView
+    private lateinit var titleText: TextView
+    private lateinit var statusText: TextView
+    private lateinit var guidanceCard: LinearLayout
+    private lateinit var guidanceLabel: TextView
+    private lateinit var guidanceText: TextView
+    private lateinit var ocrPanel: LinearLayout
+    private lateinit var ocrStatusText: TextView
+    private lateinit var ocrResultText: TextView
+    private lateinit var progress: ProgressBar
+    private lateinit var liveButton: Button
+    private lateinit var textButton: Button
+    private lateinit var directionButtons: List<TextView>
+
     private var textToSpeech: TextToSpeech? = null
     private var vibrator: Vibrator? = null
     private var currentMode        = ProcessingMode.LIVE
     private var isProcessing       = false
     private var latestGuide        = "실시간 안내 모드가 준비되었습니다."
     private var latestDetectedText: String? = null
-    private var liveOcrStatus      = LiveOcrStatus.SEARCHING
+    private var liveOcrStatus = LiveOcrStatus.SEARCHING
     private var latestLiveDirection = "center"
     private var latestLiveRiskScore = 0
     private var lastLiveRequestMs  = 0L
@@ -109,12 +122,17 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         }
         root.addView(overlay, FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
 
-        overlay.addView(makeModePill())
-        overlay.addView(spacer())
-        overlay.addView(buildGuidanceCard())
-        overlay.addView(buildOcrCard())
-        overlay.addView(buildDirStrip())
-        overlay.addView(buildModeBar())
+        overlay.addView(makeHeader())
+        overlay.addView(View(this), LinearLayout.LayoutParams(1, 0, 1f))
+
+        guidanceCard = makeGuidanceCard()
+        overlay.addView(guidanceCard)
+
+        ocrPanel = makeOcrPanel()
+        overlay.addView(ocrPanel)
+
+        overlay.addView(makeDirectionStrip())
+        overlay.addView(makeModeSelector())
 
         setContentView(root)
         renderState()
@@ -218,100 +236,73 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private fun buildOcrCard(): LinearLayout {
         ocrCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(16), dp(18), dp(18))
-            background  = glassCard(C_PRIMARY, dp(20))
-            elevation   = dp(12).toFloat()
+            setPadding(dp(22), dp(20), dp(22), dp(20))
+            background = glassPanel(PALETTE_GLASS_STRONG, PALETTE_PRIMARY, dp(26), dp(2))
+            elevation = dp(18).toFloat()
+
+            guidanceLabel = TextView(context).apply {
+                text = "안내"
+                textSize = 16f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(PALETTE_PRIMARY)
+            }
+            guidanceText = TextView(context).apply {
+                textSize = 32f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.WHITE)
+                setLineSpacing(dp(4).toFloat(), 1f)
+                maxLines = 3
+                setAutoSizeTextTypeUniformWithConfiguration(22, 32, 2, TypedValue.COMPLEX_UNIT_SP)
+                setPadding(0, dp(12), 0, 0)
+            }
+            addView(guidanceLabel)
+            addView(guidanceText)
         }
 
-        val topRow = LinearLayout(this).apply {
+    private fun makeOcrPanel(): LinearLayout =
+        LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(18), dp(20), dp(18))
+            background = glassPanel(PALETTE_GLASS_STRONG, PALETTE_PRIMARY, dp(24), dp(2))
+            elevation = dp(18).toFloat()
+
+            ocrStatusText = TextView(context).apply {
+                textSize = 20f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.WHITE)
+            }
+            ocrResultText = TextView(context).apply {
+                textSize = 26f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.WHITE)
+                setLineSpacing(dp(6).toFloat(), 1f)
+                setAutoSizeTextTypeUniformWithConfiguration(18, 26, 2, TypedValue.COMPLEX_UNIT_SP)
+                setPadding(0, dp(14), 0, 0)
+            }
+            val scroll = ScrollView(context).apply { addView(ocrResultText) }
+            addView(ocrStatusText)
+            addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(210)))
+        }
+
+    private fun makeDirectionStrip(): View {
+        val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity     = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(10), 0, 0)
         }
-
-        // small icon badge
-        val iconBadge = TextView(this).apply {
-            text      = "OCR"
-            textSize  = 9f
-            typeface  = Typeface.DEFAULT_BOLD
-            gravity   = Gravity.CENTER
-            setTextColor(C_PRIMARY)
-            background = rounded(0x261AADFF.toInt(), dp(7))
-            setPadding(dp(6), dp(4), dp(6), dp(4))
-        }
-        topRow.addView(iconBadge)
-
-        ocrStatusLbl = TextView(this).apply {
-            textSize = 13f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(0x78FFFFFF.toInt())
-            setPadding(dp(10), 0, 0, 0)
-        }
-        topRow.addView(ocrStatusLbl, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-
-        val spin2 = ProgressBar(this).apply { isIndeterminate = true; scaleX = 0.65f; scaleY = 0.65f }
-        topRow.addView(spin2, dp(24), dp(24))
-        ocrCard.addView(topRow)
-
-        ocrDivider = View(this).apply { background = GradientDrawable().apply { setColor(0x14FFFFFF) } }
-        val divLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1))
-        divLp.topMargin = dp(14); divLp.bottomMargin = dp(14)
-        ocrCard.addView(ocrDivider, divLp)
-
-        ocrResultLbl = TextView(this).apply {
-            textSize = 26f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
-            setLineSpacing(dp(4).toFloat(), 1f)
-            setAutoSizeTextTypeUniformWithConfiguration(18, 26, 1, TypedValue.COMPLEX_UNIT_SP)
-        }
-        ocrCard.addView(ocrResultLbl, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-        ))
-
-        val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-        lp.bottomMargin = dp(8)
-        ocrCard.layoutParams = lp
-        return ocrCard
-    }
-
-    // ── Direction Strip ───────────────────────────────────────
-    private fun buildDirStrip(): View {
-        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        val labels = listOf("왼쪽", "정면", "오른쪽")
-        dirButtons = labels.map { lbl ->
-            LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity     = Gravity.CENTER
-                background  = glassCard(0x00000000, dp(14))
-                elevation   = dp(4).toFloat()
-
-                val arrow = TextView(this@MainActivity).apply {
-                    text      = when (lbl) { "왼쪽" -> "←"; "오른쪽" -> "→"; else -> "↑" }
-                    textSize  = 15f
-                    typeface  = Typeface.DEFAULT_BOLD
-                    gravity   = Gravity.CENTER
-                    setTextColor(0x59FFFFFF.toInt())
+        directionButtons = listOf("왼쪽", "정면", "오른쪽").map { label ->
+            TextView(this).apply {
+                text = label
+                gravity = Gravity.CENTER
+                textSize = 14f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.WHITE)
+            }.also {
+                val params = LinearLayout.LayoutParams(0, dp(64), 1f).apply {
+                    marginEnd = dp(8)
                 }
-                val label = TextView(this@MainActivity).apply {
-                    text      = lbl
-                    textSize  = 9f
-                    typeface  = Typeface.DEFAULT_BOLD
-                    gravity   = Gravity.CENTER
-                    letterSpacing = 0.05f
-                    setTextColor(0x4CFFFFFF.toInt())
-                    setPadding(0, dp(2), 0, 0)
-                }
-                addView(arrow)
-                addView(label)
-
-                val lp = LinearLayout.LayoutParams(0, dp(54), 1f)
-                lp.marginEnd = if (lbl != "오른쪽") dp(7) else 0
-                layoutParams = lp
-            }.also { row.addView(it) }
+                row.addView(it, params)
+            }
         }
-        val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(54))
-        lp.bottomMargin = dp(8)
-        row.layoutParams = lp
         return row
     }
 
@@ -417,7 +408,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         currentMode = mode
         stabilityTracker.reset()
         latestDetectedText = null
-        liveOcrStatus      = LiveOcrStatus.SEARCHING
+        liveOcrStatus = LiveOcrStatus.SEARCHING
         latestLiveDirection = "center"
         latestLiveRiskScore = 0
 
@@ -474,15 +465,17 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         return if (t.isNullOrBlank()) allowDup else allowDup || duplicateSuppressor.shouldSpeak(t)
     }
 
-    private fun updateResponse(r: AnalysisResponse) {
-        latestGuide = r.voiceGuide.ifBlank { latestGuide }
-        latestDetectedText = r.detectedText
-        if (r.mode == ProcessingMode.LIVE.wireName && r.status != "error") {
-            val p = r.detections?.firstOrNull()
-            latestLiveDirection = p?.position ?: "center"
-            latestLiveRiskScore = p?.riskScore ?: 0
-        } else if (r.mode == ProcessingMode.LIVE.wireName) {
-            latestLiveDirection = "center"; latestLiveRiskScore = 0
+    private fun updateResponse(response: AnalysisResponse) {
+        latestGuide = response.voiceGuide.ifBlank { latestGuide }
+        latestDetectedText = response.detectedText
+
+        if (response.mode == ProcessingMode.LIVE.wireName && response.status != "error") {
+            val primaryDetection = response.detections?.firstOrNull()
+            latestLiveDirection = primaryDetection?.position ?: "center"
+            latestLiveRiskScore = primaryDetection?.riskScore ?: 0
+        } else if (response.mode == ProcessingMode.LIVE.wireName) {
+            latestLiveDirection = "center"
+            latestLiveRiskScore = 0
         }
     }
 
@@ -493,9 +486,55 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         runOnUiThread { renderState() }
     }
 
-    private fun speak(msg: String) {
-        if (msg.isBlank()) return
-        runOnUiThread { textToSpeech?.speak(msg, TextToSpeech.QUEUE_FLUSH, null, "g-${System.currentTimeMillis()}") }
+    private fun renderState() {
+        val textMode = currentMode == ProcessingMode.TEXT
+        titleText.text = if (textMode) "문자 읽기" else "보행 안내"
+        statusText.text = if (isProcessing) "처리 중" else if (textMode) "준비됨" else "주변 확인 중"
+        progress.visibility = if (isProcessing) View.VISIBLE else View.GONE
+
+        guidanceCard.visibility = if (textMode) View.GONE else View.VISIBLE
+        ocrPanel.visibility = if (textMode) View.VISIBLE else View.GONE
+        guidanceText.text = latestGuide
+        ocrStatusText.text = liveOcrStatus.message
+        ocrResultText.text = latestDetectedText.orEmpty()
+
+        val severityColor = severityColor()
+        guidanceLabel.setTextColor(severityColor)
+        guidanceCard.background = glassPanel(PALETTE_GLASS_STRONG, severityColor, dp(26), dp(2))
+
+        liveButton.background = activeButton(if (!textMode) PALETTE_PRIMARY else PALETTE_PASSIVE, !textMode)
+        liveButton.elevation = if (!textMode) dp(8).toFloat() else 0f
+        liveButton.setTextColor(if (!textMode) Color.BLACK else Color.WHITE)
+        textButton.background = activeButton(if (textMode) PALETTE_PRIMARY else PALETTE_PASSIVE, textMode)
+        textButton.elevation = if (textMode) dp(8).toFloat() else 0f
+        textButton.setTextColor(if (textMode) Color.BLACK else Color.WHITE)
+
+        directionButtons.forEachIndexed { index, view ->
+            val direction = when (index) {
+                0 -> "left"
+                2 -> "right"
+                else -> "center"
+            }
+            val active = latestLiveDirection == direction
+            view.background = glassPanel(if (active) severityColor else PALETTE_PASSIVE, if (active) 0xA6FFFFFF.toInt() else 0x30FFFFFF, dp(16), dp(1))
+            view.elevation = if (active) dp(8).toFloat() else dp(3).toFloat()
+            view.setTextColor(if (active) Color.BLACK else 0xC7FFFFFF.toInt())
+            view.visibility = if (textMode) View.GONE else View.VISIBLE
+        }
+    }
+
+    private fun severityColor(): Int =
+        when {
+            latestLiveRiskScore >= 85 -> PALETTE_DANGER
+            latestLiveRiskScore >= 55 -> PALETTE_WARNING
+            else -> PALETTE_PRIMARY
+        }
+
+    private fun speak(message: String) {
+        if (message.isBlank()) return
+        runOnUiThread {
+            textToSpeech?.speak(message, TextToSpeech.QUEUE_FLUSH, null, "guide-${System.currentTimeMillis()}")
+        }
     }
 
     private fun configureTtsVoice() {
