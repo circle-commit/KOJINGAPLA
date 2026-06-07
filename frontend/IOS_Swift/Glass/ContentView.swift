@@ -1,6 +1,6 @@
 //
 //  ContentView.swift
-//  Glass — redesigned UI
+//  Glass — redesigned UI (large text for low vision)
 //
 
 import SwiftUI
@@ -18,7 +18,7 @@ private enum P {
     static let pill        = Color.white.opacity(0.07)
 }
 
-// MARK: - Enums (unchanged — keep existing logic intact)
+// MARK: - Enums
 private enum AppMode: String, CaseIterable {
     case live = "실시간"
     case ocr  = "문자 읽기"
@@ -68,22 +68,19 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            // Camera
             CameraPreview(session: cam.session)
                 .ignoresSafeArea()
 
-            // Vignette + fog
             VignetteLayer()
 
-            // UI
             VStack(spacing: 0) {
                 StatusBar()
-                    .padding(.horizontal, 22)
+                    .padding(.horizontal, 24)
                     .padding(.top, 14)
 
                 ModePill(mode: mode, processing: cam.isProcessing)
-                    .padding(.horizontal, 22)
-                    .padding(.top, 14)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 16)
 
                 Spacer()
 
@@ -94,29 +91,28 @@ struct ContentView: View {
                             severity:  severity,
                             direction: activeDir
                         )
-                        .padding(.horizontal, 16)
+                        .padding(.horizontal, 18)
                     } else {
                         OcrPanel(
-                            status:      cam.liveOCRStatus.rawValue,
-                            result:      cam.latestDetectedText,
-                            processing:  cam.isProcessing
+                            status:     cam.liveOCRStatus.rawValue,
+                            result:     cam.latestDetectedText,
+                            processing: cam.isProcessing
                         )
-                        .padding(.horizontal, 16)
+                        .padding(.horizontal, 18)
                     }
                 }
 
                 ModeBar(selected: $mode) { m in
                     cam.setMode(m.processingMode)
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 10)
-                .padding(.bottom, 28)
+                .padding(.horizontal, 18)
+                .padding(.top, 12)
+                .padding(.bottom, 30)
             }
         }
         .onAppear { cam.setMode(mode.processingMode) }
     }
 
-    // MARK: computed
     private var liveMessage: String { cam.latestGuide }
 
     private var severity: Severity {
@@ -137,17 +133,15 @@ struct ContentView: View {
 // MARK: - Vignette
 private struct VignetteLayer: View {
     var body: some View {
-        ZStack {
-            LinearGradient(
-                colors: [
-                    Color(red:0.02, green:0.03, blue:0.08).opacity(0.88),
-                    .clear,
-                    Color(red:0.02, green:0.03, blue:0.08).opacity(0.96)
-                ],
-                startPoint: .top, endPoint: .bottom
-            )
-            .ignoresSafeArea()
-        }
+        LinearGradient(
+            colors: [
+                Color(red:0.02, green:0.03, blue:0.08).opacity(0.88),
+                .clear,
+                Color(red:0.02, green:0.03, blue:0.08).opacity(0.96)
+            ],
+            startPoint: .top, endPoint: .bottom
+        )
+        .ignoresSafeArea()
     }
 }
 
@@ -156,14 +150,14 @@ private struct StatusBar: View {
     var body: some View {
         HStack {
             Text(currentTime)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 15, weight: .semibold))  // 13→15
                 .foregroundStyle(.white.opacity(0.8))
             Spacer()
-            HStack(spacing: 4) {
+            HStack(spacing: 5) {
                 ForEach(0..<3, id: \.self) { i in
                     Circle()
                         .fill(.white.opacity(i == 2 ? 0.25 : 0.55))
-                        .frame(width: 5, height: 5)
+                        .frame(width: 6, height: 6)  // 5→6
                 }
             }
         }
@@ -173,34 +167,33 @@ private struct StatusBar: View {
     }
 }
 
-// MARK: - Mode Pill (header)
+// MARK: - Mode Pill
 private struct ModePill: View {
     let mode: AppMode
     let processing: Bool
 
     var body: some View {
         HStack(spacing: 0) {
-            // status dot
             Circle()
                 .fill(mode == .live ? P.live : P.primary)
-                .frame(width: 7, height: 7)
-                .padding(.leading, 12)
+                .frame(width: 10, height: 10)  // 7→10
+                .padding(.leading, 14)
 
             Text(mode == .live ? "보행 안내" : "문자 읽기")
-                .font(.system(size: 13, weight: .bold))
+                .font(.system(size: 17, weight: .bold))  // 13→17
                 .foregroundStyle(.white)
-                .padding(.leading, 7)
+                .padding(.leading, 9)
 
             if processing {
                 ProgressView()
                     .tint(P.primary)
-                    .scaleEffect(0.65)
-                    .padding(.leading, 8)
+                    .scaleEffect(0.75)
+                    .padding(.leading, 10)
             }
 
             Spacer()
         }
-        .frame(height: 36)
+        .frame(height: 46)  // 36→46
         .background(P.pill, in: Capsule())
         .overlay(Capsule().stroke(P.glassStroke, lineWidth: 1))
     }
@@ -213,7 +206,7 @@ private struct LivePanel: View {
     let direction: Dir
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 10) {
             GuidanceCard(message: message, severity: severity)
             DirStrip(active: direction, severity: severity)
         }
@@ -226,31 +219,31 @@ private struct GuidanceCard: View {
     let severity: Severity
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
                 Rectangle()
                     .fill(severity.color)
-                    .frame(width: 3, height: 14)
-                    .clipShape(.rect(cornerRadius: 2))
+                    .frame(width: 5, height: 20)  // 3×14 → 5×20
+                    .clipShape(.rect(cornerRadius: 3))
                 Text(severity.label)
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.system(size: 14, weight: .bold))  // 10→14
                     .tracking(1.2)
                     .foregroundStyle(severity.color)
             }
 
             Text(message)
-                .font(.system(size: 22, weight: .bold))
+                .font(.system(size: 28, weight: .bold))  // 22→28
                 .foregroundStyle(.white)
-                .lineSpacing(3)
+                .lineSpacing(5)
                 .minimumScaleFactor(0.75)
                 .lineLimit(3)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(18)
-        .background(P.glass, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .padding(22)  // 18→22
+        .background(P.glass, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(severity.color.opacity(0.28), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(severity.color.opacity(0.28), lineWidth: 1.5)
         )
     }
 }
@@ -261,12 +254,12 @@ private struct DirStrip: View {
     let severity: Severity
 
     var body: some View {
-        HStack(spacing: 7) {
+        HStack(spacing: 8) {
             ForEach(Dir.allCases, id: \.self) { d in
                 DirCell(dir: d, isActive: d == active, color: severity.color)
             }
         }
-        .frame(height: 54)
+        .frame(height: 72)  // 54→72
     }
 }
 
@@ -276,27 +269,23 @@ private struct DirCell: View {
     let color: Color
 
     var body: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 5) {
             Image(systemName: dir.arrow)
-                .font(.system(size: 14, weight: .bold))
+                .font(.system(size: 20, weight: .bold))  // 14→20
                 .foregroundStyle(isActive ? color : .white.opacity(0.35))
             Text(dir.rawValue)
-                .font(.system(size: 9, weight: .bold))
-                .tracking(0.5)
+                .font(.system(size: 13, weight: .bold))  // 9→13
+                .tracking(0.4)
                 .foregroundStyle(isActive ? color.opacity(0.9) : .white.opacity(0.3))
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 54)
-        .background(
-            isActive
-                ? color.opacity(0.14)
-                : P.pill
-        )
+        .frame(height: 72)  // 54→72
+        .background(isActive ? color.opacity(0.14) : P.pill)
         .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(isActive ? color.opacity(0.45) : P.glassStroke, lineWidth: 1)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(isActive ? color.opacity(0.45) : P.glassStroke, lineWidth: 1.5)
         )
-        .clipShape(.rect(cornerRadius: 14, style: .continuous))
+        .clipShape(.rect(cornerRadius: 16, style: .continuous))
     }
 }
 
@@ -308,18 +297,18 @@ private struct OcrPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 10) {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+            HStack(spacing: 12) {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(P.primary.opacity(0.14))
-                    .frame(width: 30, height: 30)
+                    .frame(width: 36, height: 36)  // 30→36
                     .overlay(
                         Image(systemName: "text.viewfinder")
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.system(size: 17, weight: .semibold))  // 14→17
                             .foregroundStyle(P.primary)
                     )
 
                 Text(status)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 17, weight: .semibold))  // 13→17
                     .foregroundStyle(P.dimText)
 
                 Spacer()
@@ -327,38 +316,38 @@ private struct OcrPanel: View {
                 if processing {
                     ProgressView()
                         .tint(P.primary)
-                        .scaleEffect(0.75)
+                        .scaleEffect(0.85)
                 }
             }
 
             if let text = result, !text.isEmpty {
                 Divider()
                     .background(.white.opacity(0.08))
-                    .padding(.vertical, 14)
+                    .padding(.vertical, 16)
 
                 Text(text)
-                    .font(.system(size: 26, weight: .bold))
+                    .font(.system(size: 32, weight: .bold))  // 26→32
                     .foregroundStyle(.white)
-                    .lineSpacing(4)
+                    .lineSpacing(6)
             }
         }
-        .padding(18)
+        .padding(22)  // 18→22
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(P.glass, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .background(P.glass, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(P.primary.opacity(0.25), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(P.primary.opacity(0.25), lineWidth: 1.5)
         )
     }
 }
 
-// MARK: - Mode Bar (bottom)
+// MARK: - Mode Bar
 private struct ModeBar: View {
     @Binding var selected: AppMode
     let onChange: (AppMode) -> Void
 
     var body: some View {
-        HStack(spacing: 7) {
+        HStack(spacing: 8) {
             ForEach(AppMode.allCases, id: \.self) { m in
                 ModeBtn(mode: m, active: selected == m) {
                     selected = m
@@ -366,10 +355,10 @@ private struct ModeBar: View {
                 }
             }
         }
-        .padding(6)
-        .background(P.glass, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .padding(7)
+        .background(P.glass, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
                 .stroke(P.glassStroke, lineWidth: 1)
         )
     }
@@ -382,20 +371,18 @@ private struct ModeBtn: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 7) {
+            HStack(spacing: 8) {
                 Image(systemName: mode.icon)
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.system(size: 20, weight: .bold))  // 16→20
                 Text(mode.rawValue)
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.system(size: 18, weight: .bold))  // 14→18
             }
             .foregroundStyle(active ? Color(red:0.02, green:0.06, blue:0.14) : .white.opacity(0.6))
             .frame(maxWidth: .infinity)
-            .frame(height: 48)
+            .frame(height: 58)  // 48→58
             .background(
-                active
-                    ? P.primary
-                    : Color.clear,
-                in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+                active ? P.primary : Color.clear,
+                in: RoundedRectangle(cornerRadius: 20, style: .continuous)
             )
         }
         .buttonStyle(.plain)
