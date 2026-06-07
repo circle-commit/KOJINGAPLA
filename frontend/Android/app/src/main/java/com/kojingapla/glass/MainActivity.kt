@@ -103,7 +103,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         vibrator = getSystemService(VIBRATOR_SERVICE) as Vibrator
         textToSpeech = TextToSpeech(this, this)
         buildUi()
-        if (hasCameraPermission()) startCamera()
+        if (hasCameraPermission()) startCameraWhenReady()
         else ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), 10)
     }
 
@@ -113,7 +113,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
     override fun onRequestPermissionsResult(req: Int, perms: Array<out String>, results: IntArray) {
         super.onRequestPermissionsResult(req, perms, results)
-        if (req == 10 && results.firstOrNull() == PackageManager.PERMISSION_GRANTED) startCamera()
+        if (req == 10 && results.firstOrNull() == PackageManager.PERMISSION_GRANTED) startCameraWhenReady()
         else { liveOcrStatus = LiveOcrStatus.UNAVAILABLE; renderState() }
     }
 
@@ -404,15 +404,19 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         liveBoxes = emptyList()
 
         latestGuide = if (mode == ProcessingMode.LIVE) {
-            pulse(35); "실시간 보행 안내를 시작할게요."
+            pulse(35); "실시간 보행 안내를 시작합니다."
         } else {
-            pulse(65); "문자 읽기 모드예요. 카메라를 가까운 문자에 맞춰 주세요."
+            pulse(65); "문자 읽기 모드입니다. 카메라를 가까운 문자에 맞춰주세요."
         }
         renderState()
         if (mode == ProcessingMode.LIVE) speak(latestGuide)
     }
 
     // ── Camera / processing ───────────────────────────────────
+    private fun startCameraWhenReady() {
+        previewView.post { startCamera() }
+    }
+
     private fun startCamera() {
         val fut = ProcessCameraProvider.getInstance(this)
         fut.addListener({
@@ -422,7 +426,17 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .build().also { it.setAnalyzer(cameraExecutor, FrameAnalyzer()) }
             cp.unbindAll()
-            cp.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
+            val viewPort = previewView.viewPort
+            if (viewPort != null) {
+                val useCases = UseCaseGroup.Builder()
+                    .setViewPort(viewPort)
+                    .addUseCase(preview)
+                    .addUseCase(analysis)
+                    .build()
+                cp.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, useCases)
+            } else {
+                cp.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
+            }
             setMode(currentMode)
         }, ContextCompat.getMainExecutor(this))
     }
@@ -487,8 +501,13 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                 if (bb.size != 4) return@mapNotNull null
                 val x1 = minOf(bb[0], bb[2]); val y1 = minOf(bb[1], bb[3])
                 val x2 = maxOf(bb[0], bb[2]); val y2 = maxOf(bb[1], bb[3])
+                val left = (x1 / w).toFloat().coerceIn(0f, 1f)
+                val top = (y1 / h).toFloat().coerceIn(0f, 1f)
+                val right = (x2 / w).toFloat().coerceIn(0f, 1f)
+                val bottom = (y2 / h).toFloat().coerceIn(0f, 1f)
+                if (right - left <= 0f || bottom - top <= 0f) return@mapNotNull null
                 LiveGuidanceBox(
-                    rect = RectRatio((x1 / w).toFloat(), (y1 / h).toFloat(), (x2 / w).toFloat(), (y2 / h).toFloat()),
+                    rect = RectRatio(left, top, right, bottom),
                     riskScore = d.riskScore ?: 0,
                     label = d.koreanLabel ?: d.label
                 )
@@ -497,8 +516,17 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
     private fun updateLiveOcrStatus(s: LiveOcrStatus) {
         if (currentMode != ProcessingMode.TEXT || (isProcessing && s != LiveOcrStatus.READING)) return
+        val changed = liveOcrStatus != s
         liveOcrStatus = s
         if (latestDetectedText.isNullOrBlank()) latestGuide = s.message
+        if (changed && !isProcessing) {
+            when (s) {
+                LiveOcrStatus.DETECTED -> pulse(35)
+                LiveOcrStatus.STABILIZING -> pulse(24)
+                LiveOcrStatus.SEARCHING, LiveOcrStatus.COOLING_DOWN -> pulse(18)
+                LiveOcrStatus.READING, LiveOcrStatus.UNAVAILABLE -> Unit
+            }
+        }
         runOnUiThread { renderState() }
     }
 

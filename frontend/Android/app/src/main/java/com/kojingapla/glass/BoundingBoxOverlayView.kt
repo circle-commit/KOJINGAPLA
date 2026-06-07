@@ -65,6 +65,8 @@ class BoundingBoxOverlayView(context: Context) : View(context) {
     override fun onDraw(canvas: Canvas) {
         val vw = width.toFloat()
         val vh = height.toFloat()
+        canvas.save()
+        canvas.clipRect(0f, 0f, vw, vh)
 
         // Center marker (white cross + ring), matching iOS PreviewCenterMarker.
         val cx = vw / 2f
@@ -73,7 +75,10 @@ class BoundingBoxOverlayView(context: Context) : View(context) {
         canvas.drawRect(cx - dp(1f), cy - dp(14f), cx + dp(1f), cy + dp(14f), markerFill)
         canvas.drawCircle(cx, cy, dp(6f), markerStroke)
 
-        if (imageW <= 0f || imageH <= 0f || boxes.isEmpty()) return
+        if (imageW <= 0f || imageH <= 0f || boxes.isEmpty()) {
+            canvas.restore()
+            return
+        }
 
         // Aspect-fill mapping: scale by the larger axis ratio and center-crop the overflow.
         val scale = maxOf(vw / imageW, vh / imageH)
@@ -109,13 +114,16 @@ class BoundingBoxOverlayView(context: Context) : View(context) {
             val tagW = tagTextPaint.measureText(label) + padH * 2
             val tagH = textH + padV * 2
             val tagAbove = top > dp(16f)
-            val tagBottom = if (tagAbove) top - dp(3f) else top + tagH
-            val tagTop = tagBottom - tagH
+            val unclampedTagBottom = if (tagAbove) top - dp(3f) else top + tagH
+            val tagBottom = unclampedTagBottom.coerceIn(tagH, vh)
+            val tagTop = (tagBottom - tagH).coerceIn(0f, vh - tagH)
+            val tagLeft = left.coerceIn(0f, (vw - tagW).coerceAtLeast(0f))
 
             tagBgPaint.color = color
-            canvas.drawRect(left, tagTop, left + tagW, tagBottom, tagBgPaint)
-            canvas.drawText(label, left + padH, tagBottom - padV - fm.descent, tagTextPaint)
+            canvas.drawRect(tagLeft, tagTop, tagLeft + tagW, tagTop + tagH, tagBgPaint)
+            canvas.drawText(label, tagLeft + padH, tagTop + tagH - padV - fm.descent, tagTextPaint)
         }
+        canvas.restore()
     }
 
     /// Risk-based color: green when calm, yellow for caution, red for danger.

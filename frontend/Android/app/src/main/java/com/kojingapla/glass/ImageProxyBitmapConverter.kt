@@ -19,11 +19,12 @@ object ImageProxyBitmapConverter {
             stream.toByteArray()
         }
         val bitmap = BitmapFactory.decodeByteArray(jpegBytes, 0, jpegBytes.size) ?: return null
+        val cropped = cropToViewport(bitmap, image.cropRect)
         val rotation = image.imageInfo.rotationDegrees
-        if (rotation == 0) return bitmap
+        if (rotation == 0) return cropped
 
         val matrix = Matrix().apply { postRotate(rotation.toFloat()) }
-        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+        return Bitmap.createBitmap(cropped, 0, 0, cropped.width, cropped.height, matrix, true)
     }
 
     fun lumaSample(image: ImageProxy, columns: Int = 24, rows: Int = 32): List<Double> {
@@ -79,6 +80,15 @@ object ImageProxyBitmapConverter {
             }
         }
         return nv21
+    }
+
+    private fun cropToViewport(bitmap: Bitmap, cropRect: Rect): Bitmap {
+        val left = cropRect.left.coerceIn(0, bitmap.width - 1)
+        val top = cropRect.top.coerceIn(0, bitmap.height - 1)
+        val right = cropRect.right.coerceIn(left + 1, bitmap.width)
+        val bottom = cropRect.bottom.coerceIn(top + 1, bitmap.height)
+        if (left == 0 && top == 0 && right == bitmap.width && bottom == bitmap.height) return bitmap
+        return Bitmap.createBitmap(bitmap, left, top, right - left, bottom - top)
     }
 
     private fun copyPlane(
