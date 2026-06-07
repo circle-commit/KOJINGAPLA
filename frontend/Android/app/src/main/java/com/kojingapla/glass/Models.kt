@@ -58,3 +58,14 @@ data class TextStabilityDecision(
     val status: LiveOcrStatus,
     val shouldRunFullOcr: Boolean
 )
+
+/// A single bounding box to render over the live camera preview.
+///
+/// `rect` is normalized to the 0...1 image coordinate space so the view layer can
+/// map it onto an aspect-fill (FILL_CENTER) camera preview at any screen size.
+/// Mirrors iOS `LiveGuidanceBox`.
+data class LiveGuidanceBox(
+    val rect: RectRatio,
+    val riskScore: Int,
+    val label: String
+)
