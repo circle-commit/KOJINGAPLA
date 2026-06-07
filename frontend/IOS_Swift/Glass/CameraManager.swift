@@ -319,19 +319,38 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
 
         return ranked.prefix(Self.liveBoxMaxCount).compactMap { detection in
             guard let bbox = detection.bboxXYXY, bbox.count == 4 else { return nil }
-
-            // Normalize pixel bbox (x1, y1, x2, y2) into the 0...1 image space.
-            let x1 = min(bbox[0], bbox[2]) / imageSize.width
-            let y1 = min(bbox[1], bbox[3]) / imageSize.height
-            let x2 = max(bbox[0], bbox[2]) / imageSize.width
-            let y2 = max(bbox[1], bbox[3]) / imageSize.height
-
             return LiveGuidanceBox(
-                rect: CGRect(x: x1, y: y1, width: x2 - x1, height: y2 - y1),
+                rect: normalizedPortraitRect(fromLandscapeBBox: bbox, imageSize: imageSize),
                 riskScore: detection.riskScore ?? 0,
                 label: detection.koreanLabel ?? detection.label
             )
         }
+    }
+
+    /// Converts a backend bounding box into a normalized (0...1) rect in the upright
+    /// portrait space the camera preview is rendered in.
+    ///
+    /// The frame is uploaded as JPEG with EXIF `.right` orientation, which the backend's
+    /// `cv2.imdecode` ignores — so YOLO returns `bbox_xyxy` in the *un-rotated landscape*
+    /// buffer space. The preview shows that buffer rotated 90° clockwise, so we apply the
+    /// same rotation to the box: a landscape point (x, y) maps to portrait (H − y, x),
+    /// where H (landscape height) equals the portrait width, i.e. `imageSize.width`.
+    private func normalizedPortraitRect(fromLandscapeBBox bbox: [Double], imageSize: CGSize) -> CGRect {
+        let landscapeHeight = imageSize.width   // portrait width  == landscape height
+        let landscapeWidth = imageSize.height   // portrait height == landscape width
+
+        let bx1 = min(bbox[0], bbox[2])
+        let by1 = min(bbox[1], bbox[3])
+        let bx2 = max(bbox[0], bbox[2])
+        let by2 = max(bbox[1], bbox[3])
+
+        // Rotate 90° clockwise into portrait, then normalize.
+        let xMin = (landscapeHeight - by2) / landscapeHeight
+        let xMax = (landscapeHeight - by1) / landscapeHeight
+        let yMin = bx1 / landscapeWidth
+        let yMax = bx2 / landscapeWidth
+
+        return CGRect(x: xMin, y: yMin, width: xMax - xMin, height: yMax - yMin)
     }
 
     private func updateLiveOCRStatus(_ status: LiveOCRStatus) {
