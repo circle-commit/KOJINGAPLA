@@ -187,6 +187,8 @@ def _parse_yolo_result(result: Any, frame_width: int, frame_height: int) -> list
         confidence = float(box.conf[0].item())
         bbox_xyxy = [float(value) for value in box.xyxy[0].tolist()]
 
+        if _area_ratio_from_bbox(bbox_xyxy, frame_width, frame_height) < 0.01:
+            continue
         detections.append(
             {
                 "label": str(names[class_id]),

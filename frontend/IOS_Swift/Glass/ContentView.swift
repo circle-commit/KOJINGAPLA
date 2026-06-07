@@ -48,17 +48,10 @@ private enum Severity {
     }
 }
 
-private enum Dir: String, CaseIterable {
-    case left   = "왼쪽"
+private enum GuidanceDirection: String, CaseIterable {
+    case left = "왼쪽"
     case center = "정면"
-    case right  = "오른쪽"
-    var arrow: String {
-        switch self {
-        case .left:   return "arrow.left"
-        case .center: return "arrow.up"
-        case .right:  return "arrow.right"
-        }
-    }
+    case right = "오른쪽"
 }
 
 // MARK: - Root View
@@ -82,24 +75,26 @@ struct ContentView: View {
                     .padding(.horizontal, 24)
                     .padding(.top, 16)
 
-                Spacer()
+                if selectedMode == .liveAnalyzing {
+                    VoiceGuidanceCard(
+                        message: displayGuidance,
+                        severity: liveGuidanceSeverity,
+                        isProcessing: cameraManager.isProcessing
+                    )
 
-                Group {
-                    if mode == .live {
-                        LivePanel(
-                            message:   liveMessage,
-                            severity:  severity,
-                            direction: activeDir
-                        )
-                        .padding(.horizontal, 18)
-                    } else {
-                        OcrPanel(
-                            status:     cam.liveOCRStatus.rawValue,
-                            result:     cam.latestDetectedText,
-                            processing: cam.isProcessing
-                        )
-                        .padding(.horizontal, 18)
-                    }
+                    DirectionGuidanceStrip(
+                        activeDirection: liveGuidanceDirection,
+                        severity: liveGuidanceSeverity
+                    )
+                }
+
+                if selectedMode == .textDescription {
+                    LiveOCRPanel(
+                        status: cameraManager.liveOCRStatus,
+                        text: textCaptureDisplayText,
+                        isProcessing: cameraManager.isProcessing,
+                        hasResult: hasOCRResult
+                    )
                 }
 
                 ModeBar(selected: $mode) { m in
@@ -121,49 +116,41 @@ struct ContentView: View {
         return .calm
     }
 
-    private var activeDir: Dir {
-        switch cam.latestLiveDirection {
-        case "left":  return .left
-        case "right": return .right
-        default:      return .center
+    private var hasOCRResult: Bool {
+        guard let detectedText = cameraManager.latestDetectedText else { return false }
+        return !detectedText.isEmpty
+    }
+
+    private var textCaptureDisplayText: String {
+        if let detectedText = cameraManager.latestDetectedText,
+           !detectedText.isEmpty {
+            return detectedText
+        }
+
+        return cameraManager.liveOCRStatus.rawValue
+    }
+
+    private var liveGuidanceDirection: GuidanceDirection {
+        switch cameraManager.latestLiveDirection {
+        case "left":
+            return .left
+        case "right":
+            return .right
+        default:
+            return .center
         }
     }
-}
 
-// MARK: - Vignette
-private struct VignetteLayer: View {
-    var body: some View {
-        LinearGradient(
-            colors: [
-                Color(red:0.02, green:0.03, blue:0.08).opacity(0.88),
-                .clear,
-                Color(red:0.02, green:0.03, blue:0.08).opacity(0.96)
-            ],
-            startPoint: .top, endPoint: .bottom
-        )
-        .ignoresSafeArea()
-    }
-}
-
-// MARK: - Status Bar
-private struct StatusBar: View {
-    var body: some View {
-        HStack {
-            Text(currentTime)
-                .font(.system(size: 15, weight: .semibold))  // 13→15
-                .foregroundStyle(.white.opacity(0.8))
-            Spacer()
-            HStack(spacing: 5) {
-                ForEach(0..<3, id: \.self) { i in
-                    Circle()
-                        .fill(.white.opacity(i == 2 ? 0.25 : 0.55))
-                        .frame(width: 6, height: 6)  // 5→6
-                }
-            }
+    private var liveGuidanceSeverity: GuidanceSeverity {
+        if cameraManager.latestLiveRiskScore >= 85 {
+            return .danger
         }
-    }
-    private var currentTime: String {
-        let f = DateFormatter(); f.dateFormat = "H:mm"; return f.string(from: Date())
+
+        if cameraManager.latestLiveRiskScore >= 55 {
+            return .warning
+        }
+
+        return .calm
     }
 }
 
@@ -381,10 +368,93 @@ private struct ModeBtn: View {
             .frame(maxWidth: .infinity)
             .frame(height: 58)  // 48→58
             .background(
-                active ? P.primary : Color.clear,
-                in: RoundedRectangle(cornerRadius: 20, style: .continuous)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(isActive ? AppPalette.primary : AppPalette.passiveButton)
+                    .shadow(color: isActive ? AppPalette.primary.opacity(0.34) : .clear, radius: 14, x: 0, y: 7)
             )
         }
-        .buttonStyle(.plain)
+        .accessibilityLabel(mode.title)
+        .accessibilityAddTraits(isActive ? .isSelected : [])
+    }
+}
+
+private struct DirectionGuidanceStrip: View {
+    let activeDirection: GuidanceDirection
+    let severity: GuidanceSeverity
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(GuidanceDirection.allCases, id: \.self) { direction in
+                DirectionSegment(
+                    direction: direction,
+                    isActive: direction == activeDirection,
+                    severity: severity
+                )
+            }
+        }
+        .frame(height: 64)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("위험 방향")
+        .accessibilityValue(activeDirection.rawValue)
+    }
+}
+
+private struct DirectionSegment: View {
+    let direction: GuidanceDirection
+    let isActive: Bool
+    let severity: GuidanceSeverity
+
+    var body: some View {
+        VStack(spacing: 5) {
+            Image(systemName: iconName)
+                .font(.system(size: 20, weight: .bold))
+            Text(direction.rawValue)
+                .font(.caption.weight(.bold))
+        }
+        .foregroundStyle(isActive ? AppPalette.primaryText : .white.opacity(0.78))
+        .frame(maxWidth: .infinity)
+        .frame(height: 64)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(isActive ? severity.tint : AppPalette.passiveButton)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(isActive ? Color.white.opacity(0.65) : AppPalette.surfaceBorder, lineWidth: 2)
+        )
+    }
+
+    private var iconName: String {
+        switch direction {
+        case .left:
+            return "arrow.left"
+        case .center:
+            return "arrow.up"
+        case .right:
+            return "arrow.right"
+        }
+    }
+}
+
+private struct GlassCardModifier: ViewModifier {
+    let cornerRadius: CGFloat
+    let tint: Color
+
+    func body(content: Content) -> some View {
+        content
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .background(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(tint)
+            )
+            .shadow(color: Color.black.opacity(0.42), radius: 28, x: 0, y: 18)
+            .shadow(color: AppPalette.blueGlow.opacity(0.16), radius: 22, x: 0, y: 8)
+    }
+}
+
+private extension View {
+    func glassCard(cornerRadius: CGFloat, tint: Color) -> some View {
+        modifier(GlassCardModifier(cornerRadius: cornerRadius, tint: tint))
     }
 }

@@ -12,6 +12,9 @@ HIGH_RISK_LABELS = {"motorcycle", "scooter", "bicycle"}
 MEDIUM_HIGH_RISK_LABELS = {"bollard", "pole", "movable_signage", "tree_trunk"}
 MEDIUM_RISK_LABELS = {"person", "wheelchair", "stroller"}
 LOWER_RISK_LABELS = {"bench", "potted_plant", "traffic_sign", "traffic_light"}
+IMMEDIATE_SPEECH_LABELS = HIGHEST_RISK_LABELS | {"motorcycle", "scooter"}
+LOW_CONFIDENCE_SPEECH_LABELS = HIGHEST_RISK_LABELS | HIGH_RISK_LABELS | {"wheelchair", "stroller"}
+NOISY_SPEECH_LABELS = {"pole", "tree_trunk", "traffic_sign", "traffic_light", "movable_signage"}
 OBSTACLE_LABELS = MEDIUM_HIGH_RISK_LABELS | {
     "bench",
     "potted_plant",
@@ -66,6 +69,48 @@ EVENT_RANK = {
 _TEMPLATE_RANDOM = Random()
 
 
+@dataclass(frozen=True)
+class DistanceThresholds:
+    very_close_area: float
+    very_close_vertical: float
+    close_area: float
+    close_vertical: float
+    near_area: float
+    near_vertical: float
+
+
+DEFAULT_DISTANCE_THRESHOLDS = DistanceThresholds(
+    very_close_area=0.09,
+    very_close_vertical=0.86,
+    close_area=0.04,
+    close_vertical=0.68,
+    near_area=0.018,
+    near_vertical=0.52,
+)
+
+DISTANCE_THRESHOLDS_BY_GROUP = {
+    # Large objects occupy a lot of pixels even when they are not immediately near.
+    "vehicle": DistanceThresholds(0.16, 0.90, 0.08, 0.76, 0.035, 0.58),
+    "person": DistanceThresholds(0.11, 0.88, 0.055, 0.72, 0.025, 0.54),
+    "mobility": DistanceThresholds(0.08, 0.84, 0.035, 0.64, 0.016, 0.48),
+    # Small ground obstacles can be close while their boxes are still small.
+    "ground_obstacle": DistanceThresholds(0.035, 0.80, 0.018, 0.60, 0.01, 0.42),
+    "traffic": DistanceThresholds(0.08, 0.90, 0.035, 0.76, 0.016, 0.60),
+}
+
+GROUND_OBSTACLE_DISTANCE_LABELS = {
+    "bollard",
+    "pole",
+    "tree_trunk",
+    "movable_signage",
+    "bench",
+    "potted_plant",
+    "parking_meter",
+    "stop",
+    "table",
+}
+
+
 @dataclass
 class SituationState:
     last_seen_at: float
@@ -75,6 +120,7 @@ class SituationState:
     position: str
     area_ratio: float
     approaching: bool
+    seen_count: int
 
 
 class GuidanceEventTracker:
@@ -113,6 +159,14 @@ class GuidanceEventTracker:
         with self._lock:
             self._expire_old_states(now)
             for detection in detections:
+                if not self._passes_speech_confidence(detection):
+                    self._remember_seen(detection, now, speech_eligible=False)
+                    continue
+
+                if not self._is_temporally_confirmed(detection):
+                    self._remember_seen(detection, now)
+                    continue
+
                 event = self._classify_event(detection, now)
                 self._remember_seen(detection, now)
                 if event:
@@ -158,6 +212,9 @@ class GuidanceEventTracker:
         if now - state.last_seen_at > self.stale_after_seconds:
             return _event("new_object", detection, priority=45)
 
+        if state.last_spoken_at <= 0 and (risk_score >= 35 or is_center_front):
+            return _event("new_object", detection, priority=45)
+
         if approaching and not state.approaching:
             return _event("approaching", detection, priority=95)
 
@@ -176,9 +233,16 @@ class GuidanceEventTracker:
 
         return None
 
-    def _remember_seen(self, detection: dict[str, Any], now: float) -> None:
+    def _remember_seen(
+        self,
+        detection: dict[str, Any],
+        now: float,
+        *,
+        speech_eligible: bool = True,
+    ) -> None:
         key = _object_key(detection)
         previous = self._states.get(key)
+        previous_seen_count = previous.seen_count if previous else 0
         self._states[key] = SituationState(
             last_seen_at=now,
             last_spoken_at=previous.last_spoken_at if previous else 0.0,
@@ -192,6 +256,7 @@ class GuidanceEventTracker:
             position=str(detection.get("position", "center")),
             area_ratio=float(detection.get("area_ratio", 0.0)),
             approaching=bool(detection.get("approaching")),
+            seen_count=previous_seen_count + 1 if speech_eligible else previous_seen_count,
         )
 
     def _can_speak(self, event: dict[str, Any], now: float) -> bool:
@@ -241,6 +306,30 @@ class GuidanceEventTracker:
         ]
         for key in expired:
             del self._states[key]
+
+    def _passes_speech_confidence(self, detection: dict[str, Any]) -> bool:
+        label = str(detection.get("label", ""))
+        confidence = max(0.0, min(1.0, float(detection.get("confidence", 0.0))))
+
+        if label in LOW_CONFIDENCE_SPEECH_LABELS:
+            return confidence >= 0.25
+        if label in NOISY_SPEECH_LABELS:
+            return confidence >= 0.55
+        return confidence >= 0.35
+
+    def _is_temporally_confirmed(self, detection: dict[str, Any]) -> bool:
+        label = str(detection.get("label", ""))
+        confidence = max(0.0, min(1.0, float(detection.get("confidence", 0.0))))
+
+        if label in IMMEDIATE_SPEECH_LABELS and confidence >= 0.35:
+            return True
+        if bool(detection.get("approaching")):
+            return True
+
+        state = self._states.get(_object_key(detection))
+        seen_count = (state.seen_count + 1) if state else 1
+        required_count = 3 if label in NOISY_SPEECH_LABELS else 2
+        return seen_count >= required_count
 
 
 GUIDANCE_TRACKER = GuidanceEventTracker()
@@ -348,7 +437,7 @@ def build_detection_message(detection: dict[str, Any], event_type: str) -> str:
     object_group = _object_group(label)
     approaching = bool(detection.get("approaching")) or event_type == "approaching"
     newly_detected = event_type == "new_object"
-    distance_level = _distance_level(area_ratio, vertical_ratio)
+    distance_level = _distance_level(label, area_ratio, vertical_ratio)
     front_word = "앞쪽" if label in HIGHEST_RISK_LABELS else "앞"
 
     context = {
@@ -566,14 +655,21 @@ def _object_group(label: str) -> str:
     return "obstacle"
 
 
-def _distance_level(area_ratio: float, vertical_ratio: float) -> str:
-    if area_ratio >= 0.09 or vertical_ratio >= 0.86:
+def _distance_level(label: str, area_ratio: float, vertical_ratio: float) -> str:
+    thresholds = _distance_thresholds_for(label)
+    if area_ratio >= thresholds.very_close_area or vertical_ratio >= thresholds.very_close_vertical:
         return "very_close"
-    if area_ratio >= 0.04 or vertical_ratio >= 0.68:
+    if area_ratio >= thresholds.close_area or vertical_ratio >= thresholds.close_vertical:
         return "close"
-    if area_ratio >= 0.018 or vertical_ratio >= 0.52:
+    if area_ratio >= thresholds.near_area or vertical_ratio >= thresholds.near_vertical:
         return "near"
     return "far"
+
+
+def _distance_thresholds_for(label: str) -> DistanceThresholds:
+    if label in GROUND_OBSTACLE_DISTANCE_LABELS:
+        return DISTANCE_THRESHOLDS_BY_GROUP["ground_obstacle"]
+    return DISTANCE_THRESHOLDS_BY_GROUP.get(_object_group(label), DEFAULT_DISTANCE_THRESHOLDS)
 
 
 def _base_risk(label: str) -> int:
@@ -601,10 +697,12 @@ def _position_bonus(position: str) -> int:
 
 
 def _is_front_danger_zone(detection: dict[str, Any]) -> bool:
+    label = str(detection.get("label", ""))
     position = str(detection.get("position", ""))
-    area_ratio = float(detection.get("area_ratio", 0.0))
-    vertical_ratio = float(detection.get("vertical_ratio", 0.0))
-    return position == "center" and (vertical_ratio >= 0.62 or area_ratio >= 0.035)
+    area_ratio = max(0.0, min(1.0, float(detection.get("area_ratio", 0.0))))
+    vertical_ratio = max(0.0, min(1.0, float(detection.get("vertical_ratio", 0.0))))
+    distance_level = _distance_level(label, area_ratio, vertical_ratio)
+    return position == "center" and distance_level in {"close", "very_close"}
 
 
 def _sort_detection_key(detection: dict[str, Any]) -> tuple[int, int, float, float]:
@@ -655,6 +753,7 @@ def _speech_signature(event: dict[str, Any]) -> str:
     label = str(detection.get("label", ""))
     position = str(detection.get("position", "center"))
     distance_level = _distance_level(
+        label,
         max(0.0, min(1.0, float(detection.get("area_ratio", 0.0)))),
         max(0.0, min(1.0, float(detection.get("vertical_ratio", 0.0)))),
     )
