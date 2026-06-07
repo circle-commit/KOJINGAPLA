@@ -48,12 +48,6 @@ private enum Severity {
     }
 }
 
-private enum GuidanceDirection: String, CaseIterable {
-    case left = "왼쪽"
-    case center = "정면"
-    case right = "오른쪽"
-}
-
 // MARK: - Root View
 struct ContentView: View {
     @StateObject private var cam = CameraManager()
@@ -75,27 +69,23 @@ struct ContentView: View {
                     .padding(.horizontal, 24)
                     .padding(.top, 16)
 
-                if selectedMode == .liveAnalyzing {
-                    VoiceGuidanceCard(
-                        message: displayGuidance,
-                        severity: liveGuidanceSeverity,
-                        isProcessing: cameraManager.isProcessing
-                    )
+                Spacer(minLength: 18)
 
-                    DirectionGuidanceStrip(
-                        activeDirection: liveGuidanceDirection,
-                        severity: liveGuidanceSeverity
-                    )
+                if mode == .live {
+                    GuidanceCard(message: liveMessage, severity: severity)
+                        .padding(.horizontal, 24)
                 }
 
-                if selectedMode == .textDescription {
-                    LiveOCRPanel(
-                        status: cameraManager.liveOCRStatus,
-                        text: textCaptureDisplayText,
-                        isProcessing: cameraManager.isProcessing,
-                        hasResult: hasOCRResult
+                if mode == .ocr {
+                    OcrPanel(
+                        status: cam.liveOCRStatus.rawValue,
+                        result: cam.latestDetectedText,
+                        processing: cam.isProcessing
                     )
+                    .padding(.horizontal, 24)
                 }
+
+                Spacer(minLength: 18)
 
                 ModeBar(selected: $mode) { m in
                     cam.setMode(m.processingMode)
@@ -115,42 +105,38 @@ struct ContentView: View {
         if cam.latestLiveRiskScore >= 55 { return .warning }
         return .calm
     }
+}
 
-    private var hasOCRResult: Bool {
-        guard let detectedText = cameraManager.latestDetectedText else { return false }
-        return !detectedText.isEmpty
+// MARK: - Camera Overlay
+private struct VignetteLayer: View {
+    var body: some View {
+        LinearGradient(
+            colors: [
+                P.bg.opacity(0.82),
+                P.bg.opacity(0.18),
+                P.bg.opacity(0.92)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .ignoresSafeArea()
     }
+}
 
-    private var textCaptureDisplayText: String {
-        if let detectedText = cameraManager.latestDetectedText,
-           !detectedText.isEmpty {
-            return detectedText
+private struct StatusBar: View {
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "camera.viewfinder")
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(P.primary)
+
+            Text("GLASS")
+                .font(.system(size: 18, weight: .heavy))
+                .foregroundStyle(.white)
+
+            Spacer()
         }
-
-        return cameraManager.liveOCRStatus.rawValue
-    }
-
-    private var liveGuidanceDirection: GuidanceDirection {
-        switch cameraManager.latestLiveDirection {
-        case "left":
-            return .left
-        case "right":
-            return .right
-        default:
-            return .center
-        }
-    }
-
-    private var liveGuidanceSeverity: GuidanceSeverity {
-        if cameraManager.latestLiveRiskScore >= 85 {
-            return .danger
-        }
-
-        if cameraManager.latestLiveRiskScore >= 55 {
-            return .warning
-        }
-
-        return .calm
+        .frame(height: 36)
     }
 }
 
@@ -186,20 +172,6 @@ private struct ModePill: View {
     }
 }
 
-// MARK: - Live Panel
-private struct LivePanel: View {
-    let message: String
-    let severity: Severity
-    let direction: Dir
-
-    var body: some View {
-        VStack(spacing: 10) {
-            GuidanceCard(message: message, severity: severity)
-            DirStrip(active: direction, severity: severity)
-        }
-    }
-}
-
 // MARK: - Guidance Card
 private struct GuidanceCard: View {
     let message: String
@@ -232,47 +204,6 @@ private struct GuidanceCard: View {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .stroke(severity.color.opacity(0.28), lineWidth: 1.5)
         )
-    }
-}
-
-// MARK: - Direction Strip
-private struct DirStrip: View {
-    let active: Dir
-    let severity: Severity
-
-    var body: some View {
-        HStack(spacing: 8) {
-            ForEach(Dir.allCases, id: \.self) { d in
-                DirCell(dir: d, isActive: d == active, color: severity.color)
-            }
-        }
-        .frame(height: 72)  // 54→72
-    }
-}
-
-private struct DirCell: View {
-    let dir: Dir
-    let isActive: Bool
-    let color: Color
-
-    var body: some View {
-        VStack(spacing: 5) {
-            Image(systemName: dir.arrow)
-                .font(.system(size: 20, weight: .bold))  // 14→20
-                .foregroundStyle(isActive ? color : .white.opacity(0.35))
-            Text(dir.rawValue)
-                .font(.system(size: 13, weight: .bold))  // 9→13
-                .tracking(0.4)
-                .foregroundStyle(isActive ? color.opacity(0.9) : .white.opacity(0.3))
-        }
-        .frame(maxWidth: .infinity)
-        .frame(height: 72)  // 54→72
-        .background(isActive ? color.opacity(0.14) : P.pill)
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(isActive ? color.opacity(0.45) : P.glassStroke, lineWidth: 1.5)
-        )
-        .clipShape(.rect(cornerRadius: 16, style: .continuous))
     }
 }
 
@@ -369,92 +300,11 @@ private struct ModeBtn: View {
             .frame(height: 58)  // 48→58
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(isActive ? AppPalette.primary : AppPalette.passiveButton)
-                    .shadow(color: isActive ? AppPalette.primary.opacity(0.34) : .clear, radius: 14, x: 0, y: 7)
+                    .fill(active ? P.primary : P.pill)
+                    .shadow(color: active ? P.primary.opacity(0.34) : .clear, radius: 14, x: 0, y: 7)
             )
         }
-        .accessibilityLabel(mode.title)
-        .accessibilityAddTraits(isActive ? .isSelected : [])
-    }
-}
-
-private struct DirectionGuidanceStrip: View {
-    let activeDirection: GuidanceDirection
-    let severity: GuidanceSeverity
-
-    var body: some View {
-        HStack(spacing: 8) {
-            ForEach(GuidanceDirection.allCases, id: \.self) { direction in
-                DirectionSegment(
-                    direction: direction,
-                    isActive: direction == activeDirection,
-                    severity: severity
-                )
-            }
-        }
-        .frame(height: 64)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("위험 방향")
-        .accessibilityValue(activeDirection.rawValue)
-    }
-}
-
-private struct DirectionSegment: View {
-    let direction: GuidanceDirection
-    let isActive: Bool
-    let severity: GuidanceSeverity
-
-    var body: some View {
-        VStack(spacing: 5) {
-            Image(systemName: iconName)
-                .font(.system(size: 20, weight: .bold))
-            Text(direction.rawValue)
-                .font(.caption.weight(.bold))
-        }
-        .foregroundStyle(isActive ? AppPalette.primaryText : .white.opacity(0.78))
-        .frame(maxWidth: .infinity)
-        .frame(height: 64)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(isActive ? severity.tint : AppPalette.passiveButton)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(isActive ? Color.white.opacity(0.65) : AppPalette.surfaceBorder, lineWidth: 2)
-        )
-    }
-
-    private var iconName: String {
-        switch direction {
-        case .left:
-            return "arrow.left"
-        case .center:
-            return "arrow.up"
-        case .right:
-            return "arrow.right"
-        }
-    }
-}
-
-private struct GlassCardModifier: ViewModifier {
-    let cornerRadius: CGFloat
-    let tint: Color
-
-    func body(content: Content) -> some View {
-        content
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-            .background(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(tint)
-            )
-            .shadow(color: Color.black.opacity(0.42), radius: 28, x: 0, y: 18)
-            .shadow(color: AppPalette.blueGlow.opacity(0.16), radius: 22, x: 0, y: 8)
-    }
-}
-
-private extension View {
-    func glassCard(cornerRadius: CGFloat, tint: Color) -> some View {
-        modifier(GlassCardModifier(cornerRadius: cornerRadius, tint: tint))
+        .accessibilityLabel(mode.rawValue)
+        .accessibilityAddTraits(active ? .isSelected : [])
     }
 }
