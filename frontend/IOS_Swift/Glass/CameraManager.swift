@@ -23,6 +23,14 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
     @Published var liveOCRStatus: LiveOCRStatus = .searching
     @Published var latestLiveDirection = "center"
     @Published var latestLiveRiskScore = 0
+    @Published var liveBoxes: [LiveGuidanceBox] = []
+    @Published var liveImageSize: CGSize = .zero
+
+    /// Only the most important detections are visualized; anything below this risk
+    /// score is treated as "calm" and never drawn so the preview stays uncluttered.
+    private static let liveBoxMinRisk = 55
+    /// At most this many bounding boxes are shown at once (the highest-risk objects).
+    private static let liveBoxMaxCount = 2
 
     private let output = AVCaptureVideoDataOutput()
     private let imageContext = CIContext()
@@ -32,6 +40,7 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
     private let speechManager = SpeechManager()
     private let hapticManager = HapticFeedbackManager()
     private var latestFrame: UIImage?
+    private var latestFrameSize: CGSize = .zero
     private var currentMode: ProcessingMode = .liveAnalyzing
     private var lastLiveRequestDate: Date = .distantPast
     private var lastFullOCRRequestDate: Date = .distantPast
@@ -59,6 +68,7 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
             liveOCRStatus = .searching
             latestLiveDirection = "center"
             latestLiveRiskScore = 0
+            liveBoxes = []
             hapticManager.stopRepeatingPulses()
             message = "실시간 보행 안내를 시작합니다."
             shouldAnnounceMode = true
@@ -68,6 +78,7 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
             liveOCRStatus = .searching
             latestLiveDirection = "center"
             latestLiveRiskScore = 0
+            liveBoxes = []
             hapticManager.updateOCRPulseState(.searching)
             message = "문자 읽기 모드입니다. 카메라를 가까운 문자에 맞춰주세요."
             shouldAnnounceMode = false
@@ -144,6 +155,7 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
             guard let image = imageFromSampleBuffer(sampleBuffer) else { return }
 
             latestFrame = image
+            latestFrameSize = image.size
             lastLiveRequestDate = Date()
             processImage(image, mode: .liveAnalyzing, allowDuplicateSpeech: true)
 
@@ -274,14 +286,52 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
     private func updateLiveGuidanceState(from response: AnalysisResponse) {
         guard response.mode == ProcessingMode.liveAnalyzing.rawValue else { return }
         guard response.status != "error",
-              let primaryDetection = response.detections?.first else {
+              let detections = response.detections,
+              let primaryDetection = detections.first else {
             latestLiveDirection = "center"
             latestLiveRiskScore = 0
+            liveBoxes = []
             return
         }
 
+        // Voice-guidance state is derived exactly as before — unchanged.
         latestLiveDirection = primaryDetection.position ?? "center"
         latestLiveRiskScore = primaryDetection.riskScore ?? 0
+
+        // Visualization is additive: pick only the few highest-risk objects to draw.
+        liveImageSize = latestFrameSize
+        liveBoxes = makeLiveBoxes(from: detections, imageSize: latestFrameSize)
+    }
+
+    /// Builds bounding boxes for the highest-risk detections only.
+    ///
+    /// - Detections are sorted by `risk_score` (descending).
+    /// - Nothing is drawn unless at least one object reaches `liveBoxMinRisk`, so a
+    ///   calm scene keeps the camera preview clean.
+    /// - At most `liveBoxMaxCount` boxes are returned (the top objects), each carrying
+    ///   its own risk score so the UI can color it independently.
+    private func makeLiveBoxes(from detections: [DetectionResponse], imageSize: CGSize) -> [LiveGuidanceBox] {
+        guard imageSize.width > 0, imageSize.height > 0 else { return [] }
+
+        let ranked = detections
+            .filter { ($0.riskScore ?? 0) >= Self.liveBoxMinRisk && ($0.bboxXYXY?.count ?? 0) == 4 }
+            .sorted { ($0.riskScore ?? 0) > ($1.riskScore ?? 0) }
+
+        return ranked.prefix(Self.liveBoxMaxCount).compactMap { detection in
+            guard let bbox = detection.bboxXYXY, bbox.count == 4 else { return nil }
+
+            // Normalize pixel bbox (x1, y1, x2, y2) into the 0...1 image space.
+            let x1 = min(bbox[0], bbox[2]) / imageSize.width
+            let y1 = min(bbox[1], bbox[3]) / imageSize.height
+            let x2 = max(bbox[0], bbox[2]) / imageSize.width
+            let y2 = max(bbox[1], bbox[3]) / imageSize.height
+
+            return LiveGuidanceBox(
+                rect: CGRect(x: x1, y: y1, width: x2 - x1, height: y2 - y1),
+                riskScore: detection.riskScore ?? 0,
+                label: detection.koreanLabel ?? detection.label
+            )
+        }
     }
 
     private func updateLiveOCRStatus(_ status: LiveOCRStatus) {

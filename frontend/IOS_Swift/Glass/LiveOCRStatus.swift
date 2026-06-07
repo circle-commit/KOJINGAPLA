@@ -31,6 +31,17 @@ struct AnalysisResponse: Decodable, Sendable {
     }
 }
 
+/// A single bounding box to render over the live camera preview.
+///
+/// `rect` is normalized to the 0...1 image coordinate space so the view layer can
+/// map it onto an aspect-fill camera preview at any screen size.
+struct LiveGuidanceBox: Identifiable {
+    let id = UUID()
+    let rect: CGRect
+    let riskScore: Int
+    let label: String
+}
+
 struct DetectionResponse: Decodable, Sendable {
     let label: String
     let koreanLabel: String?

@@ -12,6 +12,7 @@ private enum P {
     static let live        = Color(red:0.16,  green:0.87,  blue:0.56)
     static let warning     = Color(red:1.0,   green:0.58,  blue:0.12)
     static let danger      = Color(red:1.0,   green:0.23,  blue:0.23)
+    static let boxCaution  = Color(red:1.0,   green:0.85,  blue:0.0)   // yellow for caution boxes
     static let glass       = Color(red:0.09,  green:0.13,  blue:0.22).opacity(0.72)
     static let glassStroke = Color.white.opacity(0.10)
     static let dimText     = Color.white.opacity(0.45)
@@ -59,6 +60,11 @@ struct ContentView: View {
                 .ignoresSafeArea()
 
             VignetteLayer()
+
+            if mode == .live {
+                BoundingBoxOverlay(boxes: cam.liveBoxes, imageSize: cam.liveImageSize)
+                    .ignoresSafeArea()
+            }
 
             VStack(spacing: 0) {
                 StatusBar()
@@ -118,6 +124,82 @@ private struct VignetteLayer: View {
             endPoint: .bottom
         )
         .ignoresSafeArea()
+    }
+}
+
+// MARK: - Bounding Box Overlay
+/// Draws bounding boxes for only the most important (highest-risk) detections.
+/// Decorative for sighted / low-vision demo clarity — hidden from VoiceOver so the
+/// accessibility-first voice guidance remains the primary channel.
+private struct BoundingBoxOverlay: View {
+    let boxes: [LiveGuidanceBox]
+    let imageSize: CGSize
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .topLeading) {
+                ForEach(boxes) { box in
+                    BoundingBoxView(
+                        label: box.label,
+                        color: color(for: box.riskScore),
+                        frame: mapped(box.rect, view: geo.size)
+                    )
+                }
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    /// low → green, medium/caution → yellow, high/danger/critical → red.
+    private func color(for score: Int) -> Color {
+        if score >= 85 { return P.danger }
+        if score >= 55 { return P.boxCaution }
+        return P.live
+    }
+
+    /// Maps a normalized (0...1) image-space rect onto an aspect-fill camera preview.
+    private func mapped(_ n: CGRect, view: CGSize) -> CGRect {
+        guard imageSize.width > 0, imageSize.height > 0 else { return .zero }
+        let scale = max(view.width / imageSize.width, view.height / imageSize.height)
+        let dispW = imageSize.width * scale
+        let dispH = imageSize.height * scale
+        let offX = (view.width - dispW) / 2
+        let offY = (view.height - dispH) / 2
+        return CGRect(
+            x: offX + n.minX * dispW,
+            y: offY + n.minY * dispH,
+            width: n.width * dispW,
+            height: n.height * dispH
+        )
+    }
+}
+
+private struct BoundingBoxView: View {
+    let label: String
+    let color: Color
+    let frame: CGRect
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .stroke(color, lineWidth: 3)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(color.opacity(0.10))
+            )
+            .frame(width: max(0, frame.width), height: max(0, frame.height))
+            .overlay(alignment: .topLeading) {
+                Text(label)
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(Color(red:0.02, green:0.06, blue:0.14))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(color, in: Capsule())
+                    .fixedSize()
+                    .padding(6)
+            }
+            .offset(x: frame.minX, y: frame.minY)
     }
 }
 
