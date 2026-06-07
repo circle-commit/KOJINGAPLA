@@ -128,6 +128,8 @@ def _image_to_bgr(image: bytes | bytearray | memoryview | Any) -> Any:
         image_bgr = cv2.imdecode(encoded, cv2.IMREAD_COLOR)
         if image_bgr is None:
             raise ValueError("Could not decode image bytes.")
+        height, width = image_bgr.shape[:2]
+        print(f"[BBoxDebug] backend decoded upload frame={width}x{height}", file=sys.stderr)
         return image_bgr
 
     if isinstance(image, np.ndarray):
@@ -178,6 +180,11 @@ def _area_ratio_from_bbox(bbox_xyxy: list[float], frame_width: int, frame_height
 def _parse_yolo_result(result: Any, frame_width: int, frame_height: int) -> list[dict]:
     detections: list[dict] = []
     names = result.names
+    print(
+        f"[BBoxDebug] YOLO coordinate space frame={frame_width}x{frame_height} "
+        f"orig_shape={getattr(result, 'orig_shape', None)}",
+        file=sys.stderr,
+    )
 
     if result.boxes is None:
         return detections
@@ -186,6 +193,11 @@ def _parse_yolo_result(result: Any, frame_width: int, frame_height: int) -> list
         class_id = int(box.cls[0].item())
         confidence = float(box.conf[0].item())
         bbox_xyxy = [float(value) for value in box.xyxy[0].tolist()]
+        print(
+            f"[BBoxDebug] YOLO raw label={names[class_id]} conf={confidence:.4f} "
+            f"bbox_xyxy={[round(value, 2) for value in bbox_xyxy]}",
+            file=sys.stderr,
+        )
 
         if _area_ratio_from_bbox(bbox_xyxy, frame_width, frame_height) < 0.01:
             continue

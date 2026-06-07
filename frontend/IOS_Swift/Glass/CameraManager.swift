@@ -26,10 +26,11 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
     @Published var liveBoxes: [LiveGuidanceBox] = []
     @Published var liveImageSize: CGSize = .zero
 
-    /// Only the most important detections are visualized; anything below this risk
-    /// score is treated as "calm" and never drawn so the preview stays uncluttered.
-    private static let liveBoxMinRisk = 55
-    /// At most this many bounding boxes are shown at once (the highest-risk objects).
+    /// Every detection is visualized (classic detector-style overlay). Set above 0 to
+    /// hide low-risk objects again.
+    private static let liveBoxMinRisk = 0
+    /// Only the highest-risk objects are drawn, to keep the preview readable for low-vision
+    /// users and avoid clutter over the live guidance UI.
     private static let liveBoxMaxCount = 2
 
     private let output = AVCaptureVideoDataOutput()
@@ -48,6 +49,7 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
     private let fullOCRCooldown: TimeInterval = 3.0
     private let serverURL = "http://100.64.174.44:8000/analyze"
     private lazy var ocrService = OCRService(serverURL: serverURL)
+    private var loggedFirstFrameGeometry = false
 
     override init() {
         super.init()
@@ -217,8 +219,25 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
     private func imageFromSampleBuffer(_ buffer: CMSampleBuffer) -> UIImage? {
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(buffer) else { return nil }
         let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-        guard let cgImage = imageContext.createCGImage(ciImage, from: ciImage.extent) else { return nil }
-        return UIImage(cgImage: cgImage, scale: 1.0, orientation: .right)
+        // The sensor's CGImage is landscape; `.right` only makes `size` *report* portrait.
+        // Rotate the CI pixels so the rotation is baked into the actual bitmap — otherwise
+        // `jpegData()` can ship landscape pixels + an EXIF tag that the backend's `cv2.imdecode` ignores,
+        // and YOLO's `bbox_xyxy` comes back in a transposed space that no longer matches
+        // `image.size`, throwing the overlay boxes completely out of alignment.
+        let uprightCIImage = ciImage.oriented(.right)
+        guard let cgImage = imageContext.createCGImage(uprightCIImage, from: uprightCIImage.extent) else { return nil }
+        let image = UIImage(cgImage: cgImage, scale: 1.0, orientation: .up)
+
+        if !loggedFirstFrameGeometry {
+            loggedFirstFrameGeometry = true
+            print(
+                "[BBoxDebug] sampleBuffer extent=\(Int(ciImage.extent.width))x\(Int(ciImage.extent.height)) " +
+                "uprightImage extent=\(Int(uprightCIImage.extent.width))x\(Int(uprightCIImage.extent.height)) " +
+                "uiImage size=\(Int(image.size.width))x\(Int(image.size.height)) orientation=\(image.imageOrientation.rawValue)"
+            )
+        }
+
+        return image
     }
 
     private func processImage(_ image: UIImage, mode: ProcessingMode, allowDuplicateSpeech: Bool) {
@@ -330,10 +349,10 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
     /// Converts a backend bounding box into a normalized (0...1) rect in the upright
     /// portrait space the camera preview is rendered in.
     ///
-    /// `image.jpegData()` bakes the capture's `.right` orientation into upright-portrait
-    /// pixels before upload, so the backend decodes — and YOLO returns `bbox_xyxy` in —
-    /// that same upright-portrait space. No rotation is needed; we just normalize against
-    /// the (already portrait) `imageSize`.
+    /// `uprightImage(from:)` bakes the capture's `.right` orientation into the pixel buffer
+    /// before upload, so the uploaded JPEG — and therefore the backend-decoded frame and
+    /// YOLO's `bbox_xyxy` — all live in the same upright-portrait space as `imageSize`. No
+    /// rotation is needed here; we just normalize against the (already portrait) `imageSize`.
     private func normalizedRect(fromBBox bbox: [Double], imageSize: CGSize) -> CGRect {
         let width = imageSize.width
         let height = imageSize.height
@@ -344,12 +363,19 @@ final class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputS
         let bx2 = max(bbox[0], bbox[2])
         let by2 = max(bbox[1], bbox[3])
 
-        return CGRect(
+        let normalized = CGRect(
             x: bx1 / width,
             y: by1 / height,
             width: (bx2 - bx1) / width,
             height: (by2 - by1) / height
         )
+        print(
+            "[BBoxDebug] backend bbox_xyxy=\(bbox.map { String(format: "%.2f", $0) }.joined(separator: ",")) " +
+            "imageSize=\(Int(width))x\(Int(height)) " +
+            "normalized=x:\(String(format: "%.4f", normalized.minX)) y:\(String(format: "%.4f", normalized.minY)) " +
+            "w:\(String(format: "%.4f", normalized.width)) h:\(String(format: "%.4f", normalized.height))"
+        )
+        return normalized
     }
 
     private func updateLiveOCRStatus(_ status: LiveOCRStatus) {

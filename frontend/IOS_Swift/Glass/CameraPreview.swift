@@ -12,15 +12,27 @@ struct CameraPreview: UIViewRepresentable {
     let session: AVCaptureSession
 
     func makeUIView(context: Context) -> UIView {
-        let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene
-        let screenBounds = windowScene?.screen.bounds ?? UIScreen.main.bounds
-        let view = UIView(frame: screenBounds)
-        let previewLayer = AVCaptureVideoPreviewLayer(session: session)
-        previewLayer.frame = view.frame
-        previewLayer.videoGravity = .resizeAspectFill
-        view.layer.addSublayer(previewLayer)
+        let view = PreviewView()
+        view.previewLayer.session = session
+        view.previewLayer.videoGravity = .resizeAspectFill
+        print("[BBoxDebug] CameraPreview makeUIView bounds=\(Int(view.bounds.width))x\(Int(view.bounds.height))")
         return view
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {}
+    func updateUIView(_ uiView: UIView, context: Context) {
+        guard let previewView = uiView as? PreviewView else { return }
+        previewView.previewLayer.session = session
+        previewView.previewLayer.videoGravity = .resizeAspectFill
+        print("[BBoxDebug] CameraPreview update bounds=\(Int(uiView.bounds.width))x\(Int(uiView.bounds.height))")
+    }
+}
+
+private final class PreviewView: UIView {
+    override class var layerClass: AnyClass {
+        AVCaptureVideoPreviewLayer.self
+    }
+
+    var previewLayer: AVCaptureVideoPreviewLayer {
+        layer as! AVCaptureVideoPreviewLayer
+    }
 }

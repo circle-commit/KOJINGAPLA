@@ -42,6 +42,11 @@ final class OCRService {
             return
         }
 
+        print(
+            "[BBoxDebug] upload mode=\(mode.rawValue) imageSize=\(Int(image.size.width))x\(Int(image.size.height)) " +
+            "scale=\(image.scale) orientation=\(image.imageOrientation.rawValue) jpegBytes=\(imageData.count)"
+        )
+
         var body = Data()
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
         body.append("Content-Disposition: form-data; name=\"mode\"\r\n\r\n".data(using: .utf8)!)

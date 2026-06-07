@@ -17,6 +17,14 @@ private enum P {
     static let glassStroke = Color.white.opacity(0.10)
     static let dimText     = Color.white.opacity(0.45)
     static let pill        = Color.white.opacity(0.07)
+
+    /// Risk-based box color: green when calm, yellow for caution, red for danger.
+    /// Thresholds mirror `Severity` so the box color tracks the guidance card.
+    static func riskColor(for score: Int) -> Color {
+        if score >= 85 { return danger }      // red
+        if score >= 55 { return boxCaution }  // yellow
+        return live                           // green
+    }
 }
 
 // MARK: - Enums
@@ -137,29 +145,39 @@ private struct BoundingBoxOverlay: View {
 
     var body: some View {
         GeometryReader { geo in
+            let bounds = CGRect(origin: .zero, size: geo.size)
             ZStack(alignment: .topLeading) {
+                PreviewCenterMarker()
+                    .position(x: geo.size.width / 2, y: geo.size.height / 2)
+
                 ForEach(boxes) { box in
-                    BoundingBoxView(
-                        label: box.label,
-                        color: color(for: box.riskScore),
-                        frame: mapped(box.rect, view: geo.size)
-                    )
+                    // Map into preview space, then clip to the visible preview bounds so a
+                    // box never spills past the cropped edges of the aspect-fill image.
+                    let mappedFrame = mapped(box.rect, view: geo.size)
+                    let frame = mappedFrame.intersection(bounds)
+                    if !frame.isNull, frame.width > 1, frame.height > 1 {
+                        BoundingBoxView(
+                            label: box.label,
+                            color: P.riskColor(for: box.riskScore),
+                            frame: frame
+                        )
+                        .onAppear {
+                            logMapping(normalized: box.rect, mapped: mappedFrame, clipped: frame, view: geo.size)
+                        }
+                    }
                 }
             }
             .frame(width: geo.size.width, height: geo.size.height)
+            .clipped()  // guarantees nothing (box edges or label) draws outside the preview
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
 
-    /// low → green, medium/caution → yellow, high/danger/critical → red.
-    private func color(for score: Int) -> Color {
-        if score >= 85 { return P.danger }
-        if score >= 55 { return P.boxCaution }
-        return P.live
-    }
-
-    /// Maps a normalized (0...1) image-space rect onto an aspect-fill camera preview.
+    /// Maps a normalized (0...1) image-space rect onto the `.resizeAspectFill` camera
+    /// preview. Aspect-fill scales the image by the *larger* axis ratio and center-crops
+    /// the overflow, so we apply the same scale and centering offsets the preview layer
+    /// uses — this is what keeps the box locked to the real object on screen.
     private func mapped(_ n: CGRect, view: CGSize) -> CGRect {
         guard imageSize.width > 0, imageSize.height > 0 else { return .zero }
         let scale = max(view.width / imageSize.width, view.height / imageSize.height)
@@ -174,6 +192,44 @@ private struct BoundingBoxOverlay: View {
             height: n.height * dispH
         )
     }
+
+    private func logMapping(normalized n: CGRect, mapped: CGRect, clipped: CGRect, view: CGSize) {
+        guard imageSize.width > 0, imageSize.height > 0 else { return }
+        let scale = max(view.width / imageSize.width, view.height / imageSize.height)
+        let dispW = imageSize.width * scale
+        let dispH = imageSize.height * scale
+        let offX = (view.width - dispW) / 2
+        let offY = (view.height - dispH) / 2
+        print(
+            "[BBoxDebug] overlay view=\(Int(view.width))x\(Int(view.height)) " +
+            "imageSize=\(Int(imageSize.width))x\(Int(imageSize.height)) scale=\(String(format: "%.4f", scale)) " +
+            "display=\(String(format: "%.1f", dispW))x\(String(format: "%.1f", dispH)) " +
+            "cropOffset=(\(String(format: "%.1f", offX)),\(String(format: "%.1f", offY))) " +
+            "normalized=x:\(String(format: "%.4f", n.minX)) y:\(String(format: "%.4f", n.minY)) " +
+            "w:\(String(format: "%.4f", n.width)) h:\(String(format: "%.4f", n.height)) " +
+            "mapped=x:\(String(format: "%.1f", mapped.minX)) y:\(String(format: "%.1f", mapped.minY)) " +
+            "w:\(String(format: "%.1f", mapped.width)) h:\(String(format: "%.1f", mapped.height)) " +
+            "clipped=x:\(String(format: "%.1f", clipped.minX)) y:\(String(format: "%.1f", clipped.minY)) " +
+            "w:\(String(format: "%.1f", clipped.width)) h:\(String(format: "%.1f", clipped.height))"
+        )
+    }
+}
+
+private struct PreviewCenterMarker: View {
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(Color.white)
+                .frame(width: 28, height: 2)
+            Rectangle()
+                .fill(Color.white)
+                .frame(width: 2, height: 28)
+            Circle()
+                .stroke(Color.white, lineWidth: 2)
+                .frame(width: 12, height: 12)
+        }
+        .shadow(color: .black.opacity(0.8), radius: 2, x: 0, y: 1)
+    }
 }
 
 private struct BoundingBoxView: View {
@@ -182,24 +238,24 @@ private struct BoundingBoxView: View {
     let frame: CGRect
 
     var body: some View {
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .stroke(color, lineWidth: 3)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(color.opacity(0.10))
-            )
-            .frame(width: max(0, frame.width), height: max(0, frame.height))
-            .overlay(alignment: .topLeading) {
-                Text(label)
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(Color(red:0.02, green:0.06, blue:0.14))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(color, in: Capsule())
-                    .fixedSize()
-                    .padding(6)
-            }
-            .offset(x: frame.minX, y: frame.minY)
+        // Lift the tag above the box top edge; tuck it inside when near the screen top.
+        let tagAbove = frame.minY > 16
+
+        ZStack(alignment: .topLeading) {
+            Rectangle()
+                .stroke(color, lineWidth: 2)
+                .frame(width: max(0, frame.width), height: max(0, frame.height))
+
+            Text(label)
+                .font(.system(size: 11, weight: .heavy))
+                .foregroundStyle(Color(red:0.02, green:0.06, blue:0.14))
+                .padding(.horizontal, 4)
+                .padding(.vertical, 1)
+                .background(color)
+                .fixedSize()
+                .offset(y: tagAbove ? -15 : 0)
+        }
+        .offset(x: frame.minX, y: frame.minY)
     }
 }
 
