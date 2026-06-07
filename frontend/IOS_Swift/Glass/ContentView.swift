@@ -69,7 +69,7 @@ struct ContentView: View {
                     .padding(.horizontal, 24)
                     .padding(.top, 16)
 
-                Spacer(minLength: 18)
+                Spacer()
 
                 if mode == .live {
                     GuidanceCard(message: liveMessage, severity: severity)
@@ -84,8 +84,6 @@ struct ContentView: View {
                     )
                     .padding(.horizontal, 24)
                 }
-
-                Spacer(minLength: 18)
 
                 ModeBar(selected: $mode) { m in
                     cam.setMode(m.processingMode)
