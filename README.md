@@ -117,7 +117,7 @@ iOS `Glass` 앱의 네이티브 Android 버전. CameraX로 카메라 프레임�
 python -m vision.train --data datasets/yolo_sidewalk/data.yaml
 
 # 검증
-python -m vision.validate --weights runs/sidewalk/yolov8n_sidewalk/weights/best.pt
+python -m vision.validate --weights runs/detect/runs/sidewalk/yolov8n_sidewalk-3/weights/best.pt
 
 # 추론 (이미지 / 웹캠 + 접근 추적)
 python -m vision.predict --weights .../best.pt --source test.jpg

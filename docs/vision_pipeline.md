@@ -22,8 +22,8 @@ KOJINGAPLA/
 |   |-- predict.py
 |   `-- tracker_logic.py
 |-- runs/
-|   `-- sidewalk/
-|       `-- yolov8n_sidewalk/weights/best.pt
+|   `-- detect/runs/sidewalk/
+|       `-- yolov8n_sidewalk-3/weights/best.pt
 `-- requirements.txt
 ```
 
@@ -36,9 +36,9 @@ pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 pip install -r requirements.txt
 
 python -m vision.train --data datasets/yolo_sidewalk/data.yaml
-python -m vision.validate --weights runs/sidewalk/yolov8n_sidewalk/weights/best.pt
-python -m vision.predict --weights runs/sidewalk/yolov8n_sidewalk/weights/best.pt --source test.jpg
-python -m vision.predict --weights runs/sidewalk/yolov8n_sidewalk/weights/best.pt --source 0 --track-approach
+python -m vision.validate --weights runs/detect/runs/sidewalk/yolov8n_sidewalk-3/weights/best.pt
+python -m vision.predict --weights runs/detect/runs/sidewalk/yolov8n_sidewalk-3/weights/best.pt --source test.jpg
+python -m vision.predict --weights runs/detect/runs/sidewalk/yolov8n_sidewalk-3/weights/best.pt --source 0 --track-approach
 ```
 
 ## CPU Inference Settings
@@ -64,7 +64,7 @@ tracker = ApproachTracker(min_growth_ratio=1.35, center_band_only=False)
 async def load_detector() -> None:
     global detector
     detector = SidewalkYoloDetector(
-        "runs/sidewalk/yolov8n_sidewalk/weights/best.pt",
+        "runs/detect/runs/sidewalk/yolov8n_sidewalk-3/weights/best.pt",
         imgsz=416,
         conf=0.35,
         iou=0.5,

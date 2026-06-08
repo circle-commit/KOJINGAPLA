@@ -168,8 +168,8 @@ This slide should show that the prototype is designed around the user. The inter
 
 **Recommended screenshots**
 
-- `runs/detect/runs/sidewalk/yolov8n_sidewalk/labels.jpg`
-- `runs/detect/runs/sidewalk/yolov8n_sidewalk/train_batch0.jpg`
+- `runs/detect/runs/sidewalk/yolov8n_sidewalk-3/labels.jpg`
+- `runs/detect/runs/sidewalk/yolov8n_sidewalk-3/train_batch0.jpg`
 - `runs/detect/predict/Bbox_0221_MP_SEL_037129.jpg`
 - `runs/detect/predict/Bbox_0240_MP_SEL_042078.jpg`
 
@@ -202,7 +202,7 @@ Use a 2x2 grid:
 - **OCR app screen**: Shows text reading mode, status transitions, recognized text, and voice output behavior.
 - **Live Guidance app screen**: Shows camera-based guidance, mode switching, and directional feedback UI.
 - `runs/detect/predict/Bbox_0170_MP_SEL_031192.jpg`: Shows object detection on a sidewalk scene.
-- `runs/detect/runs/sidewalk/yolov8n_sidewalk/train_batch1.jpg`: Shows training data examples and bounding-box labels.
+- `runs/detect/runs/sidewalk/yolov8n_sidewalk-3/train_batch1.jpg`: Shows training data examples and bounding-box labels.
 
 **Speaker notes**
 
@@ -292,8 +292,8 @@ The project shows actual implementation progress across mobile UI, backend APIs,
 | `runs/detect/predict/Bbox_0221_MP_SEL_037129.jpg` | Existing | YOLO detection example |
 | `runs/detect/predict/Bbox_0240_MP_SEL_042078.jpg` | Existing | YOLO detection example |
 | `runs/detect/predict/Bbox_0170_MP_SEL_031192.jpg` | Existing | Live object localization example |
-| `runs/detect/runs/sidewalk/yolov8n_sidewalk/labels.jpg` | Existing | Dataset/class distribution |
-| `runs/detect/runs/sidewalk/yolov8n_sidewalk/train_batch0.jpg` | Existing | Training examples |
+| `runs/detect/runs/sidewalk/yolov8n_sidewalk-3/labels.jpg` | Existing | Dataset/class distribution |
+| `runs/detect/runs/sidewalk/yolov8n_sidewalk-3/train_batch0.jpg` | Existing | Training examples |
 | OCR Mode iPhone screenshot | Capture needed | OCR app UX and result |
 | Live Guidance iPhone screenshot | Capture needed | Live guidance app UX |
 
