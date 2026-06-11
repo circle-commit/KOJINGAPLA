@@ -54,10 +54,12 @@ KOJINGAPLA/
 │   └── tracker_logic.py        # 접근(approach) 추적 로직
 ├── scripts/
 │   └── convert_cvat_to_yolo.py # CVAT 어노테이션 → YOLO 포맷 변환
-├── datasets/yolo_sidewalk/     # 인도 보행 데이터셋 (data.yaml, 20개 클래스)
+├── datasets/
+│   ├── 15.인도보행영상/바운딩박스/  # 원본 입력 이미지 + CVAT 어노테이션 (Bbox_0001/ ...)
+│   └── yolo_sidewalk/          # 변환된 YOLO 데이터셋 (data.yaml, images/train·val, 20개 클래스)
 ├── runs/                       # 학습/검증/예측 결과물
 ├── docs/                       # 비전 파이프라인·데모 문서
-├── test_images/                # 테스트용 샘플 이미지
+├── test_images/                # 추론 테스트용 입력 샘플 이미지 (Bbox_*.jpg)
 ├── requirements.txt            # Python 의존성
 └── yolov8n.pt                  # YOLOv8n 사전학습 가중치
 ```
@@ -120,7 +122,9 @@ python -m vision.train --data datasets/yolo_sidewalk/data.yaml
 python -m vision.validate --weights runs/detect/runs/sidewalk/yolov8n_sidewalk-3/weights/best.pt
 
 # 추론 (이미지 / 웹캠 + 접근 추적)
-python -m vision.predict --weights .../best.pt --source test.jpg
+# 입력 이미지는 test_images/ 폴더의 샘플(Bbox_*.jpg)을 사용하거나 직접 지정합니다.
+python -m vision.predict --weights .../best.pt --source test_images/Bbox_0099_MP_SEL_011528.jpg
+python -m vision.predict --weights .../best.pt --source test_images/   # 폴더 전체
 python -m vision.predict --weights .../best.pt --source 0 --track-approach
 ```
 
@@ -144,6 +148,9 @@ CVAT로 어노테이션한 데이터를 YOLO 포맷으로 변환할 수 있습�
 ```bash
 python scripts/convert_cvat_to_yolo.py
 ```
+
+- **입력 이미지 위치**: `datasets/15.인도보행영상/바운딩박스/` — `Bbox_0001/`, `Bbox_0002/` … 폴더 아래에 원본 이미지와 CVAT 어노테이션이 함께 들어 있습니다.
+- **출력 위치**: `datasets/yolo_sidewalk/images/{train,val}` 및 `datasets/yolo_sidewalk/labels/{train,val}` — 변환된 이미지와 YOLO 라벨이 저장됩니다.
 
 데이터셋 설정은 [`datasets/yolo_sidewalk/data.yaml`](datasets/yolo_sidewalk/data.yaml)에 정의되어 있습니다.
 
