@@ -154,6 +154,53 @@ python scripts/convert_cvat_to_yolo.py
 
 데이터셋 설정은 [`datasets/yolo_sidewalk/data.yaml`](datasets/yolo_sidewalk/data.yaml)에 정의되어 있습니다.
 
+### 학습 데이터 예시
+
+데이터셋은 AI Hub **인도보행영상** 공개 데이터셋을 YOLO 포맷으로 변환한 것으로, **train 66,538장 / val 16,715장**, 20개 클래스로 구성됩니다. train/val 분할은 고정 시드로 수행되며 `datasets/yolo_sidewalk/split_manifest.json`에 기록됩니다.
+
+#### 1. 학습 배치 시각화 (Ground Truth 박스 포함)
+
+모델이 실제로 학습하는 이미지에 정답 바운딩 박스를 그린 모자이크입니다. 모자이크 증강(mosaic augmentation)이 적용된 상태 그대로입니다.
+
+| | | |
+| --- | --- | --- |
+| ![train_batch0](docs/images/dataset/train_batch0.jpg) | ![train_batch1](docs/images/dataset/train_batch1.jpg) | ![train_batch2](docs/images/dataset/train_batch2.jpg) |
+
+#### 2. 데이터셋 통계
+
+전체 학습 데이터의 클래스 분포와 바운딩 박스 크기·위치 분포입니다.
+
+![labels](docs/images/dataset/labels.jpg)
+
+#### 3. 원본 이미지 + YOLO 라벨 쌍
+
+학습 데이터는 이미지 1장당 라벨 텍스트 파일 1개로 구성됩니다. 라벨 형식은 `class_id x_center y_center width height`(0~1 정규화 좌표)입니다.
+
+![raw_sample](docs/images/dataset/Bbox_0001_MP_SEL_000001.jpg)
+
+`datasets/yolo_sidewalk/labels/train/Bbox_0001_MP_SEL_000001.txt`:
+
+```text
+14 0.678070 0.519764 0.030734 0.202676   # tree_trunk
+15 0.580904 0.392657 0.033911 0.124796   # movable_signage
+14 0.616492 0.390560 0.027745 0.266491   # tree_trunk
+14 0.579716 0.382088 0.019630 0.150176   # tree_trunk
+1 0.885651 0.369583 0.028698 0.031204    # car
+10 0.973464 0.336532 0.017865 0.031213   # traffic_sign
+1 0.959010 0.426852 0.075729 0.070370    # car
+1 0.925755 0.628333 0.148490 0.331296    # car
+1 0.913073 0.411991 0.063437 0.061204    # car
+15 0.649911 0.391602 0.043427 0.222093   # movable_signage
+```
+
+#### 4. 정답(Ground Truth) vs 모델 예측 비교
+
+검증 세트에서 정답 라벨과 학습된 모델의 예측 결과를 나란히 비교한 것입니다.
+
+| Ground Truth | Prediction |
+| --- | --- |
+| ![val_labels](docs/images/dataset/val_batch0_labels.jpg) | ![val_pred](docs/images/dataset/val_batch0_pred.jpg) |
+
 ---
 
 ## 문서

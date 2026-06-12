@@ -3,8 +3,8 @@
 .LSOverride
 Icon
 Thumbs.db
-datasets/
 models/
+datasets/
 venv/
 __pycache__/
 *.pyc
