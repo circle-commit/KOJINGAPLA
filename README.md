@@ -166,6 +166,12 @@ python scripts/convert_cvat_to_yolo.py
 | --- | --- | --- |
 | ![train_batch0](docs/images/dataset/train_batch0.jpg) | ![train_batch1](docs/images/dataset/train_batch1.jpg) | ![train_batch2](docs/images/dataset/train_batch2.jpg) |
 
+학습 후반(마지막 에폭 구간, 모자이크 증강 비활성화 이후)의 배치입니다.
+
+| | | |
+| --- | --- | --- |
+| ![train_batch291130](docs/images/dataset/train_batch291130.jpg) | ![train_batch291131](docs/images/dataset/train_batch291131.jpg) | ![train_batch291132](docs/images/dataset/train_batch291132.jpg) |
+
 #### 2. 데이터셋 통계
 
 전체 학습 데이터의 클래스 분포와 바운딩 박스 크기·위치 분포입니다.
@@ -192,6 +198,12 @@ python scripts/convert_cvat_to_yolo.py
 1 0.913073 0.411991 0.063437 0.061204    # car
 15 0.649911 0.391602 0.043427 0.222093   # movable_signage
 ```
+
+다양한 촬영 구간(`Bbox_0100`, `Bbox_0200`, `Bbox_0300`)의 학습 이미지 예시입니다. 각 이미지에는 같은 이름의 YOLO 라벨 파일이 `datasets/yolo_sidewalk/labels/train/`에 함께 존재합니다.
+
+| Bbox_0100 | Bbox_0200 | Bbox_0300 |
+| --- | --- | --- |
+| ![sample_0100](docs/images/dataset/Bbox_0100_MP_SEL_011651.jpg) | ![sample_0200](docs/images/dataset/Bbox_0200_MP_SEL_034653.jpg) | ![sample_0300](docs/images/dataset/Bbox_0300_MP_SEL_045651.jpg) |
 
 #### 4. 정답(Ground Truth) vs 모델 예측 비교
 
