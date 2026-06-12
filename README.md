@@ -154,6 +154,8 @@ python scripts/convert_cvat_to_yolo.py
 
 데이터셋 설정은 [`datasets/yolo_sidewalk/data.yaml`](datasets/yolo_sidewalk/data.yaml)에 정의되어 있습니다.
 
+> `datasets/`는 용량 문제로 `.gitignore`에 등록되어 있어, 저장소에는 구조 확인용 **샘플 파일만** 포함되어 있습니다 — CVAT 입력 예시(`Bbox_0001/MP_SEL_000001.jpg` + `0617_01.xml`), 변환된 YOLO 이미지·라벨 쌍 일부, `data.yaml`. 전체 데이터셋은 AI Hub **인도보행영상**에서 받아 위 변환 스크립트로 생성합니다.
+
 ### 학습 데이터 예시
 
 데이터셋은 AI Hub **인도보행영상** 공개 데이터셋을 YOLO 포맷으로 변환한 것으로, **train 66,538장 / val 16,715장**, 20개 클래스로 구성됩니다. train/val 분할은 고정 시드로 수행되며 `datasets/yolo_sidewalk/split_manifest.json`에 기록됩니다.

@@ -1,0 +1,24 @@
+path: /home/world/KOJINGAPLA/datasets/yolo_sidewalk
+train: images/train
+val: images/val
+names:
+  0: person
+  1: car
+  2: truck
+  3: bus
+  4: bicycle
+  5: motorcycle
+  6: scooter
+  7: wheelchair
+  8: stroller
+  9: traffic_light
+  10: traffic_sign
+  11: pole
+  12: bollard
+  13: bench
+  14: tree_trunk
+  15: movable_signage
+  16: potted_plant
+  17: parking_meter
+  18: stop
+  19: table
